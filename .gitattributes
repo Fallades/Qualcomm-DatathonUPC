@@ -1,0 +1,16 @@
+# Normalize all text files to LF. Critical for board/*.sh and board/systemd/*.service,
+# which run on Linux and break with CRLF ("bad interpreter" / Exec format errors).
+* text=auto eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Never touch these
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gguf binary
+*.db binary
