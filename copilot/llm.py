@@ -11,12 +11,15 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 SYSTEM = ("You solve multiple-choice math competition problems for school students. "
           "Read the problem and the options, then reply with the letter of the correct option.")
 VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
-                 "answer choices in the user message are authoritative. Use the image as the "
-                 "diagram or visual evidence needed to solve them. Identify the relevant rules, "
-                 "relationships, order, paths, patterns, or quantities, and solve exactly what "
-                 "is asked. Use calculations only when needed, then compare all choices. Reply "
-                 "in exactly two lines: first `ANSWER: X`, then one short sentence explaining "
-                 "why. Put the answer first and never guess from an option's position.")
+                 "answer choices in the user message are authoritative. Read the problem "
+                 "carefully and use the image as the "
+                 "diagram or visual evidence needed to solve them. First solve the exact "
+                 "question: apply its rules, relationships, order, paths, patterns, or "
+                 "calculations. Then match the result or valid condition to the corresponding "
+                 "choice letter. Do not select a letter from the diagram's position or from a "
+                 "simple visual count. Before replying, check that the letter, choice value, "
+                 "and explanation agree. Reply in exactly two lines: first `ANSWER: X` with "
+                 "only the letter, then `REASON:` followed by at most 10 words.")
 
 
 def format_problem(problem, sees_image=False):
@@ -39,11 +42,11 @@ def build_messages(problem, examples=(), image_b64=None):
         messages.append({"role": "assistant", "content": ex["label"]})
     text = ("QUESTION TEXT AND ANSWER CHOICES (use these as the problem statement):\n" +
             format_problem(problem, sees_image=bool(image_b64)))
-    text += ("\nRead the diagram and use visible answer choices only when the choices above "
-             "are missing. Solve the exact question, using rules or calculations as appropriate. "
-             "The image is supporting visual evidence; "
-             "the question and choices above come from JSON. Reply first with `ANSWER: X`, "
-             "then give one short reason. Do not write a long analysis."
+    text += ("\nUse the diagram as evidence, but solve the exact question in the JSON text. "
+             "If JSON choices are present, match your result to their exact letter. If they "
+             "are missing, read all five choices at the bottom of the image. Verify that your "
+             "chosen letter agrees with your reason. Reply first with `ANSWER: X` using only "
+             "one letter, then write `REASON:` and at most 10 words. Do not write analysis."
              if image_b64 else "\nAnswer:")
     if image_b64:
         mime = "image/jpeg" if image_b64.startswith("/9j/") else "image/png"
@@ -59,7 +62,7 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 48 if image_b64 else 1,
+        "max_tokens": 32 if image_b64 else 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
