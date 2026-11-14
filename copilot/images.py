@@ -16,8 +16,20 @@ MAX_MASK_SIDE = 320
 MAX_OUTPUT_SIDE = 384
 MASK_THRESHOLD = 245
 PADDING = 12
-DILATION_RADIUS = 2
-MIN_COMPONENT_AREA = 3
+DILATION_RADIUS = 4
+MIN_COMPONENT_AREA = 5
+
+
+import logging
+
+logging.basicConfig(
+    filename="vision_focus.log",
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    force=True
+)
+
+logger = logging.getLogger("vision_focus")
 
 
 def path_for(problem, image_dir):
@@ -78,60 +90,159 @@ def _png_pixels(data):
 
 
 def _luminance(row, x, channels):
+    """Return grayscale luminance, compositing transparency over white."""
+    i = x * channels
+
     if channels == 1:
-        return row[x]
+        return row[i]
+
     if channels == 2:
-        return row[x * 2]
-    index = x * channels
-    return (299 * row[index] + 587 * row[index + 1] + 114 * row[index + 2]) // 1000
+        gray, alpha = row[i], row[i + 1]
+        return (gray * alpha + 255 * (255 - alpha)) // 255
+
+    gray = (
+        299 * row[i] +
+        587 * row[i + 1] +
+        114 * row[i + 2]
+    ) // 1000
+
+    if channels == 4:
+        alpha = row[i + 3]
+        gray = (gray * alpha + 255 * (255 - alpha)) // 255
+
+    return gray
+
+
+def _dilate_mask(mask, width, height, radius):
+    """Expand foreground regions using a square morphological kernel."""
+    if radius <= 0:
+        return mask
+
+    expanded = bytearray(mask)
+
+    for y in range(height):
+        for x in range(width):
+            if not mask[y * width + x]:
+                continue
+
+            for dy in range(-radius, radius + 1):
+                ny = y + dy
+                if not 0 <= ny < height:
+                    continue
+
+                for dx in range(-radius, radius + 1):
+                    nx = x + dx
+                    if 0 <= nx < width:
+                        expanded[ny * width + nx] = 1
+
+    return expanded
 
 
 def _rightmost_component(width, height, channels, rows):
-    scale = max(1, (max(width, height) + MAX_MASK_SIDE - 1) // MAX_MASK_SIDE)
+    """Find the rightmost significant foreground component."""
+
+    scale = max(
+        1,
+        (max(width, height) + MAX_MASK_SIDE - 1) // MAX_MASK_SIDE
+    )
+
     small_width = (width + scale - 1) // scale
     small_height = (height + scale - 1) // scale
+
+    # 1. Build binary foreground mask.
     mask = bytearray(small_width * small_height)
+
     for y in range(small_height):
         row = rows[min(y * scale, height - 1)]
+
         for x in range(small_width):
-            if _luminance(row, min(x * scale, width - 1), channels) < MASK_THRESHOLD:
+            luminance = _luminance(
+                row,
+                min(x * scale, width - 1),
+                channels
+            )
+
+            if luminance < MASK_THRESHOLD:
                 mask[y * small_width + x] = 1
 
+    # 2. Dilate to connect nearby strokes.
+    mask = _dilate_mask(
+        mask, small_width, small_height, DILATION_RADIUS
+    )
+
+    # 3. Find connected components using 8-connectivity.
     seen = bytearray(len(mask))
-    best = None
+    components = []
+
     for start in range(len(mask)):
         if not mask[start] or seen[start]:
             continue
+
         stack = [start]
         seen[start] = 1
+
         left = right = start % small_width
         top = bottom = start // small_width
         area = 0
+
         while stack:
             point = stack.pop()
-            x, y = point % small_width, point // small_width
+            x = point % small_width
+            y = point // small_width
+
             area += 1
-            left, right = min(left, x), max(right, x)
-            top, bottom = min(top, y), max(bottom, y)
-            for next_x, next_y in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1),
-                                   (x - 1, y - 1), (x + 1, y - 1),
-                                   (x - 1, y + 1), (x + 1, y + 1)):
-                if 0 <= next_x < small_width and 0 <= next_y < small_height:
-                    next_point = next_y * small_width + next_x
-                    if mask[next_point] and not seen[next_point]:
-                        seen[next_point] = 1
-                        stack.append(next_point)
-        candidate = (right, area, left, top, bottom)
-        if best is None or candidate > best:
-            best = candidate
-    if best is None:
+            left = min(left, x)
+            right = max(right, x)
+            top = min(top, y)
+            bottom = max(bottom, y)
+
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+
+                    nx, ny = x + dx, y + dy
+
+                    if not (0 <= nx < small_width and
+                            0 <= ny < small_height):
+                        continue
+
+                    neighbor = ny * small_width + nx
+
+                    if mask[neighbor] and not seen[neighbor]:
+                        seen[neighbor] = 1
+                        stack.append(neighbor)
+
+        if area >= MIN_COMPONENT_AREA:
+            components.append((right, area, left, top, bottom))
+
+    logger.info(
+        "Component detection: mask=%dx%d, components=%d, "
+        "minimum_area=%d, dilation=%d",
+        small_width, small_height, len(components),
+        MIN_COMPONENT_AREA, DILATION_RADIUS
+    )
+
+    if components:
+        logger.info(
+            "Top components (right, area, left, top, bottom): %s",
+            sorted(components, reverse=True)[:10]
+        )
+
+    if not components:
         return None
-    _, _, left, top, bottom = best
-    right = best[0]
-    return (max(0, left * scale - PADDING),
-            max(0, top * scale - PADDING),
-            min(width, (right + 1) * scale + PADDING),
-            min(height, (bottom + 1) * scale + PADDING))
+
+    # 4. Prefer the component extending furthest right.
+    # Area breaks ties, reducing sensitivity to small noise.
+    right, area, left, top, bottom = max(components)
+
+    # 5. Convert bounding box to original image coordinates.
+    return (
+        max(0, left * scale - PADDING),
+        max(0, top * scale - PADDING),
+        min(width, (right + 1) * scale + PADDING),
+        min(height, (bottom + 1) * scale + PADDING)
+    )
 
 
 def _encode_png(width, height, channels, rows):
@@ -147,24 +258,62 @@ def _encode_png(width, height, channels, rows):
             chunk(b"IDAT", zlib.compress(raw, 1)) + chunk(b"IEND", b""))
 
 
+
 def _focus_png(data):
     decoded = _png_pixels(data)
+
     if decoded is None:
+        logger.warning("PNG decoding unsupported; keeping original")
         return data
+
     width, height, channels, rows = decoded
+
+    logger.info(
+        "PNG input: %dx%d, channels=%d, bytes=%d",
+        width, height, channels, len(data)
+    )
+
     box = _rightmost_component(width, height, channels, rows)
+
     if box is None:
+        logger.warning("PNG: no foreground component found; keeping original")
         return data
+
     left, top, right, bottom = box
-    crop_width, crop_height = right - left, bottom - top
-    scale = max(1, (max(crop_width, crop_height) + MAX_OUTPUT_SIDE - 1) // MAX_OUTPUT_SIDE)
+    crop_width = right - left
+    crop_height = bottom - top
+
+    logger.info(
+        "PNG selected crop: %s, crop=%dx%d, original=%dx%d, retained=%.1f%%",
+        box, crop_width, crop_height, width, height,
+        100 * crop_width * crop_height / (width * height)
+    )
+
+    scale = max(
+        1,
+        (max(crop_width, crop_height) + MAX_OUTPUT_SIDE - 1)
+        // MAX_OUTPUT_SIDE
+    )
+
     output_rows = [
-        b"".join(row[(left + x) * channels:(left + x + 1) * channels]
-                 for x in range(0, crop_width, scale))
+        b"".join(
+            row[(left + x) * channels:(left + x + 1) * channels]
+            for x in range(0, crop_width, scale)
+        )
         for y in range(0, crop_height, scale)
         for row in (rows[top + y],)
     ]
-    return _encode_png(len(output_rows[0]) // channels, len(output_rows), channels, output_rows)
+
+    result = _encode_png(
+        len(output_rows[0]) // channels,
+        len(output_rows),
+        channels,
+        output_rows
+    )
+
+    logger.info("PNG output: %d bytes", len(result))
+    return result
+
 
 
 def _focus_jpeg(data):
@@ -172,69 +321,33 @@ def _focus_jpeg(data):
         from PIL import Image
     except ImportError:
         return data
+
     with Image.open(io.BytesIO(data)) as source:
         gray = source.convert("L")
-        scale = max(1, (max(gray.size) + MAX_MASK_SIDE - 1) // MAX_MASK_SIDE)
-        small = gray.resize((max(1, gray.width // scale), max(1, gray.height // scale)))
-        pixels = small.load()
-        mask = bytearray(small.width * small.height)
-        for y in range(small.height):
-            for x in range(small.width):
-                if pixels[x, y] < MASK_THRESHOLD:
-                    mask[y * small.width + x] = 1
-        for _ in range(DILATION_RADIUS):
-            expanded = bytearray(mask)
-            for y in range(small.height):
-                for x in range(small.width):
-                    if mask[y * small.width + x]:
-                        continue
-                    for next_y in range(max(0, y - 1), min(small.height, y + 2)):
-                        for next_x in range(max(0, x - 1), min(small.width, x + 2)):
-                            if mask[next_y * small.width + next_x]:
-                                expanded[y * small.width + x] = 1
-                                break
-                        if expanded[y * small.width + x]:
-                            break
-            mask = expanded
-        seen = bytearray(len(mask))
-        best = None
-        for start in range(len(seen)):
-            if seen[start] or not mask[start]:
-                continue
-            stack = [start]
-            seen[start] = 1
-            left = right = start % small.width
-            top = bottom = start // small.width
-            area = 0
-            while stack:
-                point = stack.pop()
-                x, y = point % small.width, point // small.width
-                area += 1
-                left, right = min(left, x), max(right, x)
-                top, bottom = min(top, y), max(bottom, y)
-                for next_x, next_y in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1),
-                                       (x - 1, y - 1), (x + 1, y - 1),
-                                       (x - 1, y + 1), (x + 1, y + 1)):
-                    if 0 <= next_x < small.width and 0 <= next_y < small.height:
-                        next_point = next_y * small.width + next_x
-                        if mask[next_point] and not seen[next_point]:
-                            seen[next_point] = 1
-                            stack.append(next_point)
-            candidate = (right, area, left, top, bottom)
-            if best is None or candidate > best:
-                best = candidate
-        if best is None or best[1] < MIN_COMPONENT_AREA:
+        width, height = gray.size
+        pixels = gray.load()
+
+        # Reuse exactly the same segmentation logic as PNG.
+        # Represent grayscale pixels as one-channel rows.
+        rows = [
+            bytes(pixels[x, y] for x in range(width))
+            for y in range(height)
+        ]
+
+        box = _rightmost_component(width, height, 1, rows)
+
+        if box is None:
             return _resize_jpeg(data)
-        _, _, left, top, bottom = best
-        right = best[0]
-        box = (max(0, left * scale - PADDING),
-               max(0, top * scale - PADDING),
-               min(gray.width, (right + 1) * scale + PADDING),
-               min(gray.height, (bottom + 1) * scale + PADDING))
+
         crop = gray.crop(box)
-        crop.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
+        crop.thumbnail(
+            (MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE),
+            Image.Resampling.BILINEAR
+        )
+
         output = io.BytesIO()
         crop.save(output, format="PNG", optimize=False)
+
         return output.getvalue()
 
 
