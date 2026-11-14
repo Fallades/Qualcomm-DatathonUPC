@@ -1,0 +1,2 @@
+2026-11-14 23:29:18,314 [INFO] Component detection: mask=276x95, components=5, minimum_area=5, dilation=4
+2026-11-14 23:29:18,314 [INFO] Top components (right, area, left, top, bottom): [(253, 4787, 186, 0, 93), (152, 474, 122, 57, 76), (108, 1008, 76, 54, 92), (101, 866, 12, 0, 9), (63, 1034, 32, 55, 92)]
