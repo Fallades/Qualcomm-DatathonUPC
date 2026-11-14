@@ -18,6 +18,7 @@ MASK_THRESHOLD = 245
 PADDING = 12
 DILATION_RADIUS = 4
 MIN_COMPONENT_AREA = 5
+OPTION_BAND_FRACTION = 0.35
 
 
 import logging
@@ -316,7 +317,7 @@ def _focus_png(data):
 
 
 
-def _focus_jpeg(data):
+def _focus_jpeg(data, include_options=False):
     try:
         from PIL import Image
     except ImportError:
@@ -341,6 +342,16 @@ def _focus_jpeg(data):
             return _resize_jpeg(data)
 
         crop = gray.crop(box)
+        if include_options:
+            options_top = int(gray.height * (1.0 - OPTION_BAND_FRACTION))
+            options = gray.crop((0, options_top, gray.width, gray.height))
+            crop.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
+            options.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
+            width = max(crop.width, options.width)
+            combined = Image.new("L", (width, crop.height + options.height), 255)
+            combined.paste(crop, ((width - crop.width) // 2, 0))
+            combined.paste(options, ((width - options.width) // 2, crop.height))
+            crop = combined
         crop.thumbnail(
             (MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE),
             Image.Resampling.BILINEAR
@@ -375,8 +386,8 @@ def load_b64(problem, image_dir, save_dir=None):
     if data[:2] == b"\xff\xd8":
         # Without OCR options, the image may contain pictorial answer choices.
         # Keep the whole image so the vision model can inspect every choice.
-        focused = (_resize_jpeg(data) if not problem.get("options")
-                   else _focus_jpeg(data))
+        focused = (_focus_jpeg(data, include_options=True)
+                   if not problem.get("options") else _focus_jpeg(data))
     else:
         focused = _focus_png(data)
     if save_dir:
