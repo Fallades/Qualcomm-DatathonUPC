@@ -13,9 +13,11 @@ import zlib
 import os
 
 MAX_MASK_SIDE = 320
-MAX_OUTPUT_SIDE = 768
+MAX_OUTPUT_SIDE = 384
 MASK_THRESHOLD = 245
 PADDING = 12
+DILATION_RADIUS = 2
+MIN_COMPONENT_AREA = 3
 
 
 def path_for(problem, image_dir):
@@ -175,10 +177,29 @@ def _focus_jpeg(data):
         scale = max(1, (max(gray.size) + MAX_MASK_SIDE - 1) // MAX_MASK_SIDE)
         small = gray.resize((max(1, gray.width // scale), max(1, gray.height // scale)))
         pixels = small.load()
-        seen = bytearray(small.width * small.height)
+        mask = bytearray(small.width * small.height)
+        for y in range(small.height):
+            for x in range(small.width):
+                if pixels[x, y] < MASK_THRESHOLD:
+                    mask[y * small.width + x] = 1
+        for _ in range(DILATION_RADIUS):
+            expanded = bytearray(mask)
+            for y in range(small.height):
+                for x in range(small.width):
+                    if mask[y * small.width + x]:
+                        continue
+                    for next_y in range(max(0, y - 1), min(small.height, y + 2)):
+                        for next_x in range(max(0, x - 1), min(small.width, x + 2)):
+                            if mask[next_y * small.width + next_x]:
+                                expanded[y * small.width + x] = 1
+                                break
+                        if expanded[y * small.width + x]:
+                            break
+            mask = expanded
+        seen = bytearray(len(mask))
         best = None
         for start in range(len(seen)):
-            if seen[start] or pixels[start % small.width, start // small.width] >= MASK_THRESHOLD:
+            if seen[start] or not mask[start]:
                 continue
             stack = [start]
             seen[start] = 1
@@ -196,15 +217,14 @@ def _focus_jpeg(data):
                                        (x - 1, y + 1), (x + 1, y + 1)):
                     if 0 <= next_x < small.width and 0 <= next_y < small.height:
                         next_point = next_y * small.width + next_x
-                        if (not seen[next_point] and
-                                pixels[next_x, next_y] < MASK_THRESHOLD):
+                        if mask[next_point] and not seen[next_point]:
                             seen[next_point] = 1
                             stack.append(next_point)
             candidate = (right, area, left, top, bottom)
             if best is None or candidate > best:
                 best = candidate
-        if best is None:
-            return data
+        if best is None or best[1] < MIN_COMPONENT_AREA:
+            return _resize_jpeg(data)
         _, _, left, top, bottom = best
         right = best[0]
         box = (max(0, left * scale - PADDING),
@@ -218,6 +238,19 @@ def _focus_jpeg(data):
         return output.getvalue()
 
 
+def _resize_jpeg(data):
+    try:
+        from PIL import Image
+    except ImportError:
+        return data
+    with Image.open(io.BytesIO(data)) as source:
+        image = source.convert("L")
+        image.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
+        output = io.BytesIO()
+        image.save(output, format="PNG", optimize=False)
+        return output.getvalue()
+
+
 def load_b64(problem, image_dir):
     path = path_for(problem, image_dir)
     if not os.path.isfile(path):
@@ -225,7 +258,10 @@ def load_b64(problem, image_dir):
     with open(path, "rb") as image:
         data = image.read()
     if data[:2] == b"\xff\xd8":
-        focused = _focus_jpeg(data)
+        # Without OCR options, the image may contain pictorial answer choices.
+        # Keep the whole image so the vision model can inspect every choice.
+        focused = (_resize_jpeg(data) if not problem.get("options")
+                   else _focus_jpeg(data))
     else:
         focused = _focus_png(data)
     return base64.b64encode(focused).decode("ascii")

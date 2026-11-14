@@ -10,10 +10,10 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 # so text that never changes is only read once.
 SYSTEM = ("You solve multiple-choice math competition problems for school students. "
           "Read the problem and the options, then reply with the letter of the correct option.")
-VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Inspect only the relevant "
-                 "diagram or graph in the image and combine it with the text. Give at most "
-                 "two short reasoning sentences, then a final line exactly like ANSWER: C. "
-                 "Never guess from the position of the diagram.")
+VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Inspect the diagram and all "
+                 "visible answer choices in the image, and combine them with the text. Give at "
+                 "most two short reasoning sentences, then a final line exactly like ANSWER: C. "
+                 "Never guess from the position of an answer choice.")
 
 
 def format_problem(problem, sees_image=False):
@@ -51,7 +51,7 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings), allowing concise reasoning for vision requests."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 96 if image_b64 else 1,
+        "max_tokens": 32 if image_b64 else 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
