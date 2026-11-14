@@ -15,11 +15,16 @@ import os
 import random
 import statistics
 import subprocess
+import sys
 import time
 from collections import Counter, defaultdict
 
 from copilot.config import CONFIG
 from copilot.pipeline import TIME_LIMIT, solve
+from copilot.images import load_b64
+from copilot.llm import URL
+
+VISION_URL = f"http://127.0.0.1:{CONFIG['VISION_PORT']}/v1/chat/completions"
 
 
 def git_commit():
@@ -44,6 +49,10 @@ def main():
     p.add_argument("--languages", default="", help="e.g. eng,cat")
     p.add_argument("--rag", type=int, default=0, metavar="K")
     p.add_argument("--index", default="data/index.db")
+    p.add_argument("--images", default="data/images",
+                   help="problem images used for non-text-only problems")
+    p.add_argument("--no-vision", action="store_true",
+                   help="do not send non-text-only problem images")
     p.add_argument("--name", default="", help="a label for this experiment in ablations.csv")
     args = p.parse_args()
 
@@ -72,7 +81,16 @@ def main():
         writer.writerow(["id", "language", "level", "has_options", "label", "answer",
                          "correct", "seconds", "status", "prompt_tokens", "retrieved"])
         for n, problem in enumerate(problems, 1):
-            result = solve(problem, index=index, k=args.rag, exclude_id=problem["id"])
+            image = None
+            vision_url = None
+            if not args.no_vision and not problem.get("text_only", True):
+                image = load_b64(problem, args.images)
+                if image:
+                    vision_url = VISION_URL
+                else:
+                    print(f"warning: image not found for {problem['id']}", file=sys.stderr)
+            result = solve(problem, index=index, k=args.rag, exclude_id=problem["id"],
+                           image_b64=image, llm_url=vision_url or URL)
             correct = result["answer"] == problem["label"]
             row = {**problem, **result, "correct": correct, "has_options": bool(problem.get("options"))}
             rows.append(row)

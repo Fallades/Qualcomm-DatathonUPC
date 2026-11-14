@@ -956,9 +956,12 @@ Then open <http://127.0.0.1:8000> in your browser. Keys: `A` to `E` answer, `M` 
 
 **What we saw:** the model answers a problem in 5 to 10 seconds without examples, and in about 30 seconds with 2 RAG examples. The similar problems are often about the same topic (cubes, for example), but their answers don't tell the model this problem's answer.
 
-### Let the model see the image (experiment)
+### Let the model see the image
 
-Qwen3.5 0.8B can read images with a projector file. That runs a third server, on port 8083. Download it once:
+Qwen3.5 0.8B can read images with a projector file. The board setup downloads the
+projector and starts a third server on port 8083. To install it on an existing
+board, run `./board/03_download_models.sh` and `./board/04_install_services.sh`
+again.
 
 ```bash
 cd ~/models
@@ -968,7 +971,8 @@ sha256sum --check <<'EOF'
 EOF
 ```
 
-Start it in its own terminal:
+The service uses the same settings as the other servers and limits each image
+to 128 tokens:
 
 ```bash
 ~/llama.cpp/build/bin/llama-server \
@@ -982,6 +986,9 @@ Start it in its own terminal:
 ```
 
 Restart the explorer, and tick **Send the image** before you ask the model.
+`predict.py` and `eval.py` automatically send the matching PNG from
+`data/images/` for problems whose `text_only` field is false. Use
+`--no-vision` to measure the text-only baseline.
 
 `--image-max-tokens 128` shrinks the image to at most about 128 tokens. Without it, an image takes 300 to 650 tokens. What we measured on the board:
 
@@ -990,7 +997,9 @@ Restart the explorer, and tick **Send the image** before you ask the model.
 | Default (292 and 656 tokens) | 68 s and 185 s |
 | `--image-max-tokens 128` (140 to 235 tokens) | 28 to 38 s |
 
-Only the smaller images fit in the 60-second limit. On the two problems we tried, the model got the answer wrong with the image too. Treat this as an experiment, and measure it with `eval.py` before you build on it. When you're done, stop the server with `Ctrl+C` to free its RAM.
+Only the smaller images fit in the 60-second limit. Measure the accuracy and
+latency with `eval.py` before relying on vision. The vision service uses extra
+RAM, so check `free -m` on the board if another service is unstable.
 
 ---
 
