@@ -1123,6 +1123,8 @@ Claude Code finds them on its own when they fit your request, or you can ask for
 
 Claude can help you write code, but you're the ones who decide and measure. Run every change on the board, and check the numbers yourself.
 
+For the topic analysis and adaptive student tutor add-on, see [`TUTOR_ADAPTATIU.md`](TUTOR_ADAPTATIU.md). It keeps the official `predict.py` path unchanged.
+
 ### 14.2 Change one thing at a time, and measure it
 
 1. Make one change, such as a new prompt, a retrieval rule, or a hint step.
