@@ -10,11 +10,10 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 # so text that never changes is only read once.
 SYSTEM = ("You solve multiple-choice math competition problems for school students. "
           "Read the problem and the options, then reply with the letter of the correct option.")
-VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Work carefully in this order: "
-                 "read every visible label or value, identify the requested quantity, do the "
-                 "calculation, and compare the result with every answer choice. Use at most "
-                 "three short reasoning sentences, then a final line exactly like ANSWER: C. "
-                 "Never guess from the position of an answer choice.")
+VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Read the diagram, identify "
+                 "the requested quantity, calculate it, and compare all choices. Reply in "
+                 "exactly two lines: first `ANSWER: X`, then one short sentence explaining why. "
+                 "Put the answer first and never guess from an option's position.")
 
 
 def format_problem(problem, sees_image=False):
@@ -36,8 +35,8 @@ def build_messages(problem, examples=(), image_b64=None):
         messages.append({"role": "user", "content": format_problem(ex) + "\nAnswer:"})
         messages.append({"role": "assistant", "content": ex["label"]})
     text = format_problem(problem, sees_image=bool(image_b64))
-    text += ("\nRead the diagram and all visible choices. State the key values, solve the "
-             "question, compare choices, then write ANSWER: followed by one letter."
+    text += ("\nRead the diagram and all visible choices. Reply first with `ANSWER: X`, "
+             "then give one short reason. Do not write a long analysis."
              if image_b64 else "\nAnswer:")
     if image_b64:
         mime = "image/jpeg" if image_b64.startswith("/9j/") else "image/png"
@@ -53,7 +52,7 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 64 if image_b64 else 1,
+        "max_tokens": 48 if image_b64 else 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
@@ -66,7 +65,9 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     if image_b64:
         matches = re.findall(r"\bANSWER\s*:\s*([A-E])\b", content)
         if not matches:
-            matches = re.findall(r"\b([A-E])\b", content)
+            matches = re.findall(
+                r"\b(?:ANSWER|CORRECT(?:\s+OPTION|\s+ANSWER)?)\s*(?:IS|:)\s*([A-E])\b",
+                content)
         letter = matches[-1] if matches else CONFIG["FALLBACK_ANSWER"]
     else:
         letter = content
