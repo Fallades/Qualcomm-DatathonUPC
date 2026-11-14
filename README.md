@@ -673,7 +673,8 @@ cd datathon-UPC-maths-qualcomm-arduino-unoq
 
 Every later command on the board runs from this folder, `~/datathon-UPC-maths-qualcomm-arduino-unoq`. If your team forks the repository, clone your fork instead, and commit your changes there.
 
-The code uses only Python's standard library. There's no `pip` on the board, and you don't need it.
+The copilot uses the Python standard library plus the Debian `python3-pil` package
+for resizing and focusing the JPEG problem images. There's no `pip` on the board.
 
 ### 8.2 Answer the sample problems
 
@@ -891,7 +892,8 @@ The explorer is a small web app on the board. For each validation problem, it sh
 - Ask the model, with or without RAG examples, and see its answer, its time, and the exact prompt it got
 - See the 3 most similar training problems found with the embeddings, with their images and answers
 
-It uses only the Python standard library, like the rest of the code on the board.
+It uses the Python standard library and the board's `python3-pil` package for
+image preprocessing.
 
 ### Export the images
 

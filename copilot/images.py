@@ -320,6 +320,7 @@ def _focus_jpeg(data):
     try:
         from PIL import Image
     except ImportError:
+        logger.warning("JPEG focus unavailable: python3-pil is not installed; keeping original")
         return data
 
     with Image.open(io.BytesIO(data)) as source:
@@ -355,6 +356,7 @@ def _resize_jpeg(data):
     try:
         from PIL import Image
     except ImportError:
+        logger.warning("JPEG resize unavailable: python3-pil is not installed; keeping original")
         return data
     with Image.open(io.BytesIO(data)) as source:
         image = source.convert("L")

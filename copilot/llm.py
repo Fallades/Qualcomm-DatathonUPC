@@ -10,9 +10,10 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 # so text that never changes is only read once.
 SYSTEM = ("You solve multiple-choice math competition problems for school students. "
           "Read the problem and the options, then reply with the letter of the correct option.")
-VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Inspect the diagram and all "
-                 "visible answer choices in the image, and combine them with the text. Give at "
-                 "most two short reasoning sentences, then a final line exactly like ANSWER: C. "
+VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Work carefully in this order: "
+                 "read every visible label or value, identify the requested quantity, do the "
+                 "calculation, and compare the result with every answer choice. Use at most "
+                 "three short reasoning sentences, then a final line exactly like ANSWER: C. "
                  "Never guess from the position of an answer choice.")
 
 
@@ -35,8 +36,9 @@ def build_messages(problem, examples=(), image_b64=None):
         messages.append({"role": "user", "content": format_problem(ex) + "\nAnswer:"})
         messages.append({"role": "assistant", "content": ex["label"]})
     text = format_problem(problem, sees_image=bool(image_b64))
-    text += ("\nInspect the cropped image carefully. Reason briefly, then write "
-             "ANSWER: followed by one letter." if image_b64 else "\nAnswer:")
+    text += ("\nRead the diagram and all visible choices. State the key values, solve the "
+             "question, compare choices, then write ANSWER: followed by one letter."
+             if image_b64 else "\nAnswer:")
     if image_b64:
         mime = "image/jpeg" if image_b64.startswith("/9j/") else "image/png"
         content = [{"type": "image_url", "image_url": {"url": f"data:{mime};base64," + image_b64}},
@@ -51,7 +53,7 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 32 if image_b64 else 1,
+        "max_tokens": 64 if image_b64 else 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
