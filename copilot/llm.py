@@ -1,4 +1,6 @@
 """Ask the small language model for one letter, A to E."""
+import re
+
 from .config import CONFIG
 from .client import post
 
@@ -8,6 +10,10 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 # so text that never changes is only read once.
 SYSTEM = ("You solve multiple-choice math competition problems for school students. "
           "Read the problem and the options, then reply with the letter of the correct option.")
+VISION_SYSTEM = ("You solve a visual multiple-choice math problem. Inspect only the relevant "
+                 "diagram or graph in the image and combine it with the text. Give at most "
+                 "two short reasoning sentences, then a final line exactly like ANSWER: C. "
+                 "Never guess from the position of the diagram.")
 
 
 def format_problem(problem, sees_image=False):
@@ -24,13 +30,16 @@ def format_problem(problem, sees_image=False):
 
 def build_messages(problem, examples=(), image_b64=None):
     """image_b64 is a PNG as base64 text. Only a server started with --mmproj can see it."""
-    messages = [{"role": "system", "content": SYSTEM}]
+    messages = [{"role": "system", "content": VISION_SYSTEM if image_b64 else SYSTEM}]
     for ex in examples:  # solved problems retrieved with RAG, if any
         messages.append({"role": "user", "content": format_problem(ex) + "\nAnswer:"})
         messages.append({"role": "assistant", "content": ex["label"]})
-    text = format_problem(problem, sees_image=bool(image_b64)) + "\nAnswer:"
+    text = format_problem(problem, sees_image=bool(image_b64))
+    text += ("\nInspect the cropped image carefully. Reason briefly, then write "
+             "ANSWER: followed by one letter." if image_b64 else "\nAnswer:")
     if image_b64:
-        content = [{"type": "image_url", "image_url": {"url": "data:image/png;base64," + image_b64}},
+        mime = "image/jpeg" if image_b64.startswith("/9j/") else "image/png"
+        content = [{"type": "image_url", "image_url": {"url": f"data:{mime};base64," + image_b64}},
                    {"type": "text", "text": text}]
     else:
         content = text
@@ -39,14 +48,23 @@ def build_messages(problem, examples=(), image_b64=None):
 
 
 def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
-    """Return (letter, timings). The grammar makes any other output impossible."""
-    response = post(url, {
+    """Return (letter, timings), allowing concise reasoning for vision requests."""
+    payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "grammar": "root ::= [A-E]",
-        "max_tokens": 1,
+        "max_tokens": 96 if image_b64 else 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
-    }, timeout=timeout)
-    letter = response["choices"][0]["message"]["content"].strip()
+    }
+    if not image_b64:
+        payload["grammar"] = "root ::= [A-E]"
+    response = post(url, payload, timeout=timeout)
+    content = response["choices"][0]["message"]["content"].strip().upper()
+    if image_b64:
+        matches = re.findall(r"\bANSWER\s*:\s*([A-E])\b", content)
+        if not matches:
+            matches = re.findall(r"\b([A-E])\b", content)
+        letter = matches[-1] if matches else CONFIG["FALLBACK_ANSWER"]
+    else:
+        letter = content
     return letter, response.get("timings", {})
