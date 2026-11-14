@@ -987,7 +987,7 @@ to 128 tokens:
 
 Restart the explorer, and tick **Send the image** before you ask the model.
 `predict.py` and `eval.py` automatically send the matching PNG from
-`data/images/` for problems whose `text_only` field is false. Use
+`data/images/` for problems whose OCR did not find text options. Use
 `--no-vision` to measure the text-only baseline.
 
 `--image-max-tokens 128` shrinks the image to at most about 128 tokens. Without it, an image takes 300 to 650 tokens. What we measured on the board:

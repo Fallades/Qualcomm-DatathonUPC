@@ -251,7 +251,7 @@ def _resize_jpeg(data):
         return output.getvalue()
 
 
-def load_b64(problem, image_dir):
+def load_b64(problem, image_dir, save_dir=None):
     path = path_for(problem, image_dir)
     if not os.path.isfile(path):
         return None
@@ -264,4 +264,8 @@ def load_b64(problem, image_dir):
                    else _focus_jpeg(data))
     else:
         focused = _focus_png(data)
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        with open(os.path.join(save_dir, os.path.basename(path)), "wb") as output:
+            output.write(focused)
     return base64.b64encode(focused).decode("ascii")

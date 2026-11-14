@@ -48,7 +48,7 @@ def build_messages(problem, examples=(), image_b64=None):
 
 
 def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
-    """Return (letter, timings), allowing concise reasoning for vision requests."""
+    """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
         "max_tokens": 32 if image_b64 else 1,
@@ -59,7 +59,8 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     if not image_b64:
         payload["grammar"] = "root ::= [A-E]"
     response = post(url, payload, timeout=timeout)
-    content = response["choices"][0]["message"]["content"].strip().upper()
+    raw_content = response["choices"][0]["message"]["content"].strip()
+    content = raw_content.upper()
     if image_b64:
         matches = re.findall(r"\bANSWER\s*:\s*([A-E])\b", content)
         if not matches:
@@ -67,4 +68,4 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
         letter = matches[-1] if matches else CONFIG["FALLBACK_ANSWER"]
     else:
         letter = content
-    return letter, response.get("timings", {})
+    return letter, response.get("timings", {}), raw_content

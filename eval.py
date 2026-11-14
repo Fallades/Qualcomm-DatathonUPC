@@ -74,34 +74,46 @@ def main():
     stamp = time.strftime("%Y%m%d-%H%M%S")
     name = args.name or (f"rag{args.rag}" if args.rag else "baseline")
     detail_path = f"results/eval-{stamp}-{name}.csv"
+    reasoning_path = f"results/vision-reasoning-{stamp}-{name}.jsonl"
+    crop_dir = f"results/crops-{stamp}-{name}"
 
     rows = []
     with open(detail_path, "w", newline="") as out:
-        writer = csv.writer(out)
-        writer.writerow(["id", "language", "level", "has_options", "label", "answer",
-                         "correct", "seconds", "status", "prompt_tokens", "retrieved"])
-        for n, problem in enumerate(problems, 1):
-            image = None
-            vision_url = None
-            if not args.no_vision and not problem.get("text_only", True):
-                image = load_b64(problem, args.images)
-                if image:
-                    vision_url = VISION_URL
-                else:
-                    print(f"warning: image not found for {problem['id']}", file=sys.stderr)
-            result = solve(problem, index=index, k=args.rag, exclude_id=problem["id"],
-                           image_b64=image, llm_url=vision_url or URL)
-            correct = result["answer"] == problem["label"]
-            row = {**problem, **result, "correct": correct, "has_options": bool(problem.get("options"))}
-            rows.append(row)
-            writer.writerow([problem["id"], problem["language"], problem["level"], row["has_options"],
-                             problem["label"], result["answer"], int(correct), result["seconds"],
-                             result["status"], result["prompt_tokens"], result["retrieved"]])
-            out.flush()
-            running = 100 * sum(r["correct"] for r in rows) / len(rows)
-            print(f"[{n}/{len(problems)}] {problem['id']} {problem['language']}: "
-                  f"{result['answer']} (truth {problem['label']}) {result['seconds']:.1f} s, "
-                  f"running accuracy {running:.1f}%", flush=True)
+        with open(reasoning_path, "w", encoding="utf-8") as reasoning_out:
+            writer = csv.writer(out)
+            writer.writerow(["id", "language", "level", "has_options", "label", "answer",
+                             "correct", "seconds", "status", "prompt_tokens", "retrieved"])
+            for n, problem in enumerate(problems, 1):
+                image = None
+                vision_url = None
+                if not args.no_vision and not problem.get("text_only", True):
+                    image = load_b64(problem, args.images, save_dir=crop_dir)
+                    if image:
+                        vision_url = VISION_URL
+                    else:
+                        print(f"warning: image not found for {problem['id']}", file=sys.stderr)
+                result = solve(problem, index=index, k=args.rag, exclude_id=problem["id"],
+                               image_b64=image, llm_url=vision_url or URL)
+                correct = result["answer"] == problem["label"]
+                row = {**problem, **result, "correct": correct, "has_options": bool(problem.get("options"))}
+                rows.append(row)
+                writer.writerow([problem["id"], problem["language"], problem["level"], row["has_options"],
+                                 problem["label"], result["answer"], int(correct), result["seconds"],
+                                 result["status"], result["prompt_tokens"], result["retrieved"]])
+                reasoning_out.write(json.dumps({
+                    "id": problem["id"],
+                    "language": problem["language"],
+                    "answer": result["answer"],
+                    "status": result["status"],
+                    "seconds": result["seconds"],
+                    "reasoning": result["reasoning"],
+                }, ensure_ascii=False) + "\n")
+                out.flush()
+                reasoning_out.flush()
+                running = 100 * sum(r["correct"] for r in rows) / len(rows)
+                print(f"[{n}/{len(problems)}] {problem['id']} {problem['language']}: "
+                      f"{result['answer']} (truth {problem['label']}) {result['seconds']:.1f} s, "
+                      f"running accuracy {running:.1f}%", flush=True)
 
     hits = [r["correct"] for r in rows]
     seconds = [r["seconds"] for r in rows]
@@ -110,6 +122,8 @@ def main():
     accuracy = 100 * sum(hits) / len(hits)
 
     print("\n" + "=" * 60)
+    print(f"Vision reasoning log: {reasoning_path}")
+    print(f"Vision crops: {crop_dir}")
     print(f"Accuracy: {sum(hits)}/{len(hits)} = {accuracy:.1f}%")
     print(f"  floor, always {CONFIG['FALLBACK_ANSWER']}: {100 * floor / len(rows):.1f}%   random guess: 20.0%")
     print(f"Latency: mean {statistics.mean(seconds):.1f} s, median {statistics.median(seconds):.1f} s, "
