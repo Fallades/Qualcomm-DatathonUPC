@@ -14,6 +14,7 @@ import os
 
 MAX_MASK_SIDE = 320
 MAX_OUTPUT_SIDE = 384
+FULL_IMAGE_MAX_SIDE = 768
 MASK_THRESHOLD = 245
 PADDING = 12
 DILATION_RADIUS = 4
@@ -306,14 +307,15 @@ def _focus_jpeg(data, include_options=False):
             options_top = int(gray.height * (1.0 - OPTION_BAND_FRACTION))
             options = gray.crop((0, options_top, gray.width, gray.height))
             crop.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
-            options.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
+            options.thumbnail((FULL_IMAGE_MAX_SIDE, FULL_IMAGE_MAX_SIDE), Image.Resampling.BILINEAR)
             width = max(crop.width, options.width)
             combined = Image.new("L", (width, crop.height + options.height), 255)
             combined.paste(crop, ((width - crop.width) // 2, 0))
             combined.paste(options, ((width - options.width) // 2, crop.height))
             crop = combined
         crop.thumbnail(
-            (MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE),
+            ((FULL_IMAGE_MAX_SIDE if include_options else MAX_OUTPUT_SIDE),
+             (FULL_IMAGE_MAX_SIDE if include_options else MAX_OUTPUT_SIDE)),
             Image.Resampling.BILINEAR
         )
 
@@ -330,7 +332,7 @@ def _resize_jpeg(data):
         return data
     with Image.open(io.BytesIO(data)) as source:
         image = source.convert("L")
-        image.thumbnail((MAX_OUTPUT_SIDE, MAX_OUTPUT_SIDE), Image.Resampling.BILINEAR)
+        image.thumbnail((FULL_IMAGE_MAX_SIDE, FULL_IMAGE_MAX_SIDE), Image.Resampling.BILINEAR)
         output = io.BytesIO()
         image.save(output, format="PNG", optimize=False)
         return output.getvalue()

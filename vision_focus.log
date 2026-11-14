@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 2026-11-14 22:34:58,434 [INFO] Component detection: mask=276x38, components=7, minimum_area=5, dilation=4
 2026-11-14 22:34:58,435 [INFO] Top components (right, area, left, top, bottom): [(257, 1433, 204, 0, 37), (203, 2464, 14, 0, 15), (165, 231, 147, 22, 34), (137, 275, 116, 22, 34), (109, 286, 88, 22, 35), (79, 260, 60, 22, 35), (51, 256, 32, 22, 35)]
 2026-11-14 22:35:51,041 [INFO] Component detection: mask=276x49, components=7, minimum_area=5, dilation=4
@@ -18,3 +19,9 @@
 2026-11-14 22:43:31,414 [INFO] Top components (right, area, left, top, bottom): [(257, 2729, 168, 2, 51), (165, 2790, 10, 0, 19), (140, 369, 112, 34, 47), (99, 568, 71, 34, 55), (58, 589, 30, 34, 55)]
 2026-11-14 22:44:28,986 [INFO] Component detection: mask=276x50, components=6, minimum_area=5, dilation=4
 2026-11-14 22:44:28,986 [INFO] Top components (right, area, left, top, bottom): [(256, 5489, 11, 0, 28), (232, 302, 210, 35, 49), (189, 332, 164, 35, 49), (140, 276, 121, 35, 49), (95, 251, 76, 36, 49), (51, 279, 31, 36, 49)]
+=======
+2026-11-14 23:40:50,348 [INFO] Component detection: mask=276x95, components=5, minimum_area=5, dilation=4
+2026-11-14 23:40:50,348 [INFO] Top components (right, area, left, top, bottom): [(253, 4787, 186, 0, 93), (152, 474, 122, 57, 76), (108, 1008, 76, 54, 92), (101, 866, 12, 0, 9), (63, 1034, 32, 55, 92)]
+2026-11-14 23:40:50,356 [DEBUG] STREAM b'IHDR' 16 13
+2026-11-14 23:40:50,357 [DEBUG] STREAM b'IDAT' 41 36075
+>>>>>>> 738749092dcf7111a9a025b68cc24a7a116abe50
