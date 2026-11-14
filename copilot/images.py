@@ -21,18 +21,6 @@ MIN_COMPONENT_AREA = 5
 OPTION_BAND_FRACTION = 0.35
 
 
-import logging
-
-logging.basicConfig(
-    filename="vision_focus.log",
-    level=logging.DEBUG,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    force=True
-)
-
-logger = logging.getLogger("vision_focus")
-
-
 def path_for(problem, image_dir):
     filename = f"{problem['id']}_{problem['language']}.png"
     return os.path.join(image_dir, filename)
@@ -217,19 +205,6 @@ def _rightmost_component(width, height, channels, rows):
         if area >= MIN_COMPONENT_AREA:
             components.append((right, area, left, top, bottom))
 
-    logger.info(
-        "Component detection: mask=%dx%d, components=%d, "
-        "minimum_area=%d, dilation=%d",
-        small_width, small_height, len(components),
-        MIN_COMPONENT_AREA, DILATION_RADIUS
-    )
-
-    if components:
-        logger.info(
-            "Top components (right, area, left, top, bottom): %s",
-            sorted(components, reverse=True)[:10]
-        )
-
     if not components:
         return None
 
@@ -264,31 +239,18 @@ def _focus_png(data):
     decoded = _png_pixels(data)
 
     if decoded is None:
-        logger.warning("PNG decoding unsupported; keeping original")
         return data
 
     width, height, channels, rows = decoded
 
-    logger.info(
-        "PNG input: %dx%d, channels=%d, bytes=%d",
-        width, height, channels, len(data)
-    )
-
     box = _rightmost_component(width, height, channels, rows)
 
     if box is None:
-        logger.warning("PNG: no foreground component found; keeping original")
         return data
 
     left, top, right, bottom = box
     crop_width = right - left
     crop_height = bottom - top
-
-    logger.info(
-        "PNG selected crop: %s, crop=%dx%d, original=%dx%d, retained=%.1f%%",
-        box, crop_width, crop_height, width, height,
-        100 * crop_width * crop_height / (width * height)
-    )
 
     scale = max(
         1,
@@ -312,7 +274,6 @@ def _focus_png(data):
         output_rows
     )
 
-    logger.info("PNG output: %d bytes", len(result))
     return result
 
 
@@ -321,7 +282,6 @@ def _focus_jpeg(data, include_options=False):
     try:
         from PIL import Image
     except ImportError:
-        logger.warning("JPEG focus unavailable: python3-pil is not installed; keeping original")
         return data
 
     with Image.open(io.BytesIO(data)) as source:
@@ -367,7 +327,6 @@ def _resize_jpeg(data):
     try:
         from PIL import Image
     except ImportError:
-        logger.warning("JPEG resize unavailable: python3-pil is not installed; keeping original")
         return data
     with Image.open(io.BytesIO(data)) as source:
         image = source.convert("L")
