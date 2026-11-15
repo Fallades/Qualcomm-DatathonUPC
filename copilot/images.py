@@ -129,7 +129,7 @@ def _dilate_mask(mask, width, height, radius):
     return expanded
 
 
-def _rightmost_component(width, height, channels, rows):
+def _rightmost_component(width, height, channels, rows, y_limit=None):
     """Find the rightmost significant foreground component."""
 
     scale = max(
@@ -138,7 +138,8 @@ def _rightmost_component(width, height, channels, rows):
     )
 
     small_width = (width + scale - 1) // scale
-    small_height = (height + scale - 1) // scale
+    search_height = height if y_limit is None else min(height, y_limit)
+    small_height = (search_height + scale - 1) // scale
 
     # 1. Build binary foreground mask.
     mask = bytearray(small_width * small_height)
@@ -245,7 +246,10 @@ def _focus_png(data):
 
     width, height, channels, rows = decoded
 
-    box = _rightmost_component(width, height, channels, rows)
+    box = _rightmost_component(
+        width, height, channels, rows,
+        y_limit=int(height * (1.0 - OPTION_BAND_FRACTION))
+    )
 
     if box is None:
         return data
@@ -298,7 +302,10 @@ def _focus_jpeg(data, include_options=False):
             for y in range(height)
         ]
 
-        box = _rightmost_component(width, height, 1, rows)
+        box = _rightmost_component(
+            width, height, 1, rows,
+            y_limit=int(height * (1.0 - OPTION_BAND_FRACTION))
+        )
 
         if box is None:
             return _resize_jpeg(data)
@@ -346,27 +353,8 @@ def _options_jpeg(data):
         return data
     with Image.open(io.BytesIO(data)) as source:
         image = source.convert("L")
-        scale = max(1, (max(image.size) + MAX_MASK_SIDE - 1) // MAX_MASK_SIDE)
-        small = image.resize((max(1, image.width // scale),
-                              max(1, image.height // scale)),
-                             Image.Resampling.BILINEAR)
-        pixels = small.load()
-        search_top = int(small.height * OPTION_SEARCH_TOP_FRACTION)
-        points = [
-            (x, y)
-            for y in range(search_top, small.height)
-            for x in range(small.width)
-            if pixels[x, y] < MASK_THRESHOLD
-        ]
-        if not points:
-            options_top = int(image.height * (1.0 - OPTION_BAND_FRACTION))
-            box = (0, options_top, image.width, image.height)
-        else:
-            left = max(0, min(x for x, _ in points) * scale - PADDING)
-            top = max(0, min(y for _, y in points) * scale - PADDING)
-            right = min(image.width, (max(x for x, _ in points) + 1) * scale + PADDING)
-            bottom = min(image.height, (max(y for _, y in points) + 1) * scale + PADDING)
-            box = (left, top, right, bottom)
+        options_top = int(image.height * (1.0 - OPTION_BAND_FRACTION))
+        box = (0, options_top, image.width, image.height)
         options = image.crop(box)
         options.thumbnail((FULL_IMAGE_MAX_SIDE, FULL_IMAGE_MAX_SIDE),
                           Image.Resampling.BILINEAR)
@@ -382,10 +370,10 @@ def load_b64(problem, image_dir, save_dir=None):
     with open(path, "rb") as image:
         data = image.read()
     if data[:2] == b"\xff\xd8":
-        focused = ([_focus_jpeg(data), _options_jpeg(data)]
+        focused = ([data]
                    if not problem.get("options") else [_focus_jpeg(data)])
     else:
-        focused = ([_focus_png(data), data]
+        focused = ([data]
                    if not problem.get("options") else [_focus_png(data)])
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)

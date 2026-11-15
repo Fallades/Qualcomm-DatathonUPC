@@ -31,11 +31,11 @@ VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question 
                  "configurations. Before replying, check that the letter matches the correct "
                  "choice. Reply with only the letter A, B, C, D, or E.")
 VISION_INSTRUCTIONS = (
-    "Use the diagram in the DIAGRAM IMAGE as evidence, but solve the exact question in the JSON text. If JSON "
-    "choices are present, match your result to their exact letter. If they are missing, read "
-    "all five choices in the ANSWER OPTIONS IMAGE. Verify the choice, then reply with only one "
-    "letter: A, B, C, D, or E. Do not confuse visible object counts with the number of valid "
-    "ways or configurations requested."
+    "Use the image as evidence, but solve the exact question in the JSON text. If JSON choices "
+    "are present, match your result to their exact letter. If they are missing, the image is "
+    "the full problem: read the five options A), B), C), D), and E) at the bottom. Verify the "
+    "choice, then reply with only one letter: A, B, C, D, or E. Do not confuse visible object "
+    "counts with the number of valid ways or configurations requested."
 )
 
 
@@ -65,7 +65,10 @@ def build_messages(problem, examples=(), image_b64=None):
         images = image_b64 if isinstance(image_b64, list) else [image_b64]
         content = [{"type": "text", "text": text}]
         for index, image in enumerate(images):
-            label = "DIAGRAM IMAGE" if index == 0 else "ANSWER OPTIONS IMAGE"
+            if len(images) == 1 and not problem.get("options"):
+                label = "FULL PROBLEM IMAGE: diagram/table and five options at bottom"
+            else:
+                label = "DIAGRAM IMAGE" if index == 0 else "ANSWER OPTIONS IMAGE"
             mime = "image/jpeg" if image.startswith("/9j/") else "image/png"
             content.append({"type": "text", "text": label + ":"})
             content.append({"type": "image_url",
