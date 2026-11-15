@@ -20,22 +20,23 @@ TEXT_INSTRUCTIONS = (
     "letter matches its option value. Do not confuse counting visible objects with counting "
     "valid ways or configurations. Reply with only one letter: A, B, C, D, or E."
 )
-VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
-                 "answer choices in the user message are authoritative. Read the problem "
-                 "carefully and use the labeled diagram and answer-options images as the "
-                 "visual evidence needed to solve it. First solve the exact "
-                 "question: apply its rules, relationships, order, paths, patterns, or "
-                 "calculations. Then match the result or valid condition to the corresponding "
-                 "choice letter. Do not select a letter from the diagram's position or from a "
-                 "simple visual count; distinguish visible objects from valid ways or "
-                 "configurations. Before replying, check that the letter matches the correct "
-                 "choice. Reply with only the letter A, B, C, D, or E.")
+VISION_SYSTEM = ("You solve a visual Kangaroo Math multiple-choice problem. The question text "
+                 "and answer choices are authoritative. First inspect the whole image and "
+                 "transcribe every relevant label, number, colour, shape, grid, table, path, "
+                 "and arrow; keep the diagram separate from the answer options. Then solve "
+                 "the exact question: calculate lengths, angles, perimeters, or areas; apply "
+                 "rotations and other movements; compare shaded regions; follow paths or "
+                 "patterns; or count objects and valid arrangements. Do not rely on apparent "
+                 "scale, do not infer missing objects, and do not choose a letter from its "
+                 "position. Use the diagram's rules and labels, match the result to the "
+                 "corresponding choice, check it once, and reply only A, B, C, D, or E.")
 VISION_INSTRUCTIONS = (
-    "Use the image as evidence, but solve the exact question in the JSON text. If JSON choices "
-    "are present, match your result to their exact letter. If they are missing, the image is "
-    "the full problem: read the five options A), B), C), D), and E) at the bottom. Verify the "
-    "choice, then reply with only one letter: A, B, C, D, or E. Do not confuse visible object "
-    "counts with the number of valid ways or configurations requested."
+    "Inspect the whole image before solving. Use the diagram, labels, colours, arrows, and "
+    "table/grid as evidence. If JSON choices are present, match the result to their exact "
+    "letter. If they are missing, read the five options A), B), C), D), and E) at the bottom. "
+    "For rotations, track positions before and after each turn; for areas, split or subtract "
+    "shapes; for shaded regions, compare boundaries; for counting, count valid configurations "
+    "rather than visible objects. Verify once, then reply only A, B, C, D, or E."
 )
 
 
