@@ -246,10 +246,7 @@ def _focus_png(data):
 
     width, height, channels, rows = decoded
 
-    box = _rightmost_component(
-        width, height, channels, rows,
-        y_limit=int(height * (1.0 - OPTION_BAND_FRACTION))
-    )
+    box = _rightmost_component(width, height, channels, rows)
 
     if box is None:
         return data
@@ -302,10 +299,7 @@ def _focus_jpeg(data, include_options=False):
             for y in range(height)
         ]
 
-        box = _rightmost_component(
-            width, height, 1, rows,
-            y_limit=int(height * (1.0 - OPTION_BAND_FRACTION))
-        )
+        box = _rightmost_component(width, height, 1, rows)
 
         if box is None:
             return _resize_jpeg(data)
