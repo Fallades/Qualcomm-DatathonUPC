@@ -13,6 +13,11 @@ SYSTEM = ("You solve multiple-choice math competition problems for school studen
           "as part of the reasoning, eliminate choices that contradict the rules or result, "
           "and verify that the selected letter matches its value. Reply with only the letter "
           "of the correct option.")
+TEXT_INSTRUCTIONS = (
+    "Solve the exact question before answering. Use the available choices to reason and "
+    "discard choices that are impossible or contradict the problem. Verify that the final "
+    "letter matches its option value, then reply with only the letter."
+)
 VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
                  "answer choices in the user message are authoritative. Read the problem "
                  "carefully and use the labeled diagram and answer-options images as the "
@@ -20,9 +25,14 @@ VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question 
                  "question: apply its rules, relationships, order, paths, patterns, or "
                  "calculations. Then match the result or valid condition to the corresponding "
                  "choice letter. Do not select a letter from the diagram's position or from a "
-                 "simple visual count. Before replying, check that the letter, choice value, "
-                 "and explanation agree. Reply in exactly two lines: first `ANSWER: X` with "
-                 "only the letter, then `REASON:` followed by at most 10 words.")
+                 "simple visual count. Before replying, check that the letter matches the "
+                 "correct choice. Reply with only the letter A, B, C, D, or E.")
+VISION_INSTRUCTIONS = (
+    "Use the diagram in the DIAGRAM IMAGE as evidence, but solve the exact question in the JSON text. If JSON "
+    "choices are present, match your result to their exact letter. If they are missing, read "
+    "all five choices in the ANSWER OPTIONS IMAGE. Verify the choice, then reply with only one "
+    "letter: A, B, C, D, or E."
+)
 
 
 def format_problem(problem, sees_image=False):
@@ -43,17 +53,10 @@ def build_messages(problem, examples=(), image_b64=None):
     for ex in examples:  # solved problems retrieved with RAG, if any
         messages.append({"role": "user", "content": format_problem(ex) + "\nAnswer:"})
         messages.append({"role": "assistant", "content": ex["label"]})
-    text = ("QUESTION TEXT AND ANSWER CHOICES (use these as the problem statement):\n" +
+    text = ("QUESTION TEXT AND ANSWER CHOICES (from JSON):\n" +
             format_problem(problem, sees_image=bool(image_b64)))
-    text += ("\nUse the diagram as evidence, but solve the exact question in the JSON text. "
-             "If JSON choices are present, match your result to their exact letter. If they "
-             "are missing, read all five choices in the ANSWER OPTIONS IMAGE. Verify that your "
-             "chosen letter agrees with your reason. Reply first with `ANSWER: X` using only "
-             "one letter, then write `REASON:` and at most 10 words. Do not write analysis."
-             if image_b64 else
-             "\nSolve the exact question before answering. Use the available choices to reason "
-             "and discard choices that are impossible or contradict the problem. Verify that "
-             "the final letter matches its option value, then reply with only the letter.")
+    instructions = VISION_INSTRUCTIONS if image_b64 else TEXT_INSTRUCTIONS
+    text += "\n" + instructions
     if image_b64:
         images = image_b64 if isinstance(image_b64, list) else [image_b64]
         content = [{"type": "text", "text": text}]
@@ -73,13 +76,12 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 32 if image_b64 else 1,
+        "max_tokens": 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
     }
-    if not image_b64:
-        payload["grammar"] = "root ::= [A-E]"
+    payload["grammar"] = "root ::= [A-E]"
     response = post(url, payload, timeout=timeout)
     raw_content = response["choices"][0]["message"]["content"].strip()
     content = raw_content.upper()
@@ -89,7 +91,9 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
             matches = re.findall(
                 r"\b(?:ANSWER|CORRECT(?:\s+OPTION|\s+ANSWER)?)\s*(?:IS|:)\s*([A-E])\b",
                 content)
-        letter = matches[-1] if matches else CONFIG["FALLBACK_ANSWER"]
+        letter = matches[-1] if matches else (
+            content if re.fullmatch(r"[A-E]", content)
+            else CONFIG["FALLBACK_ANSWER"])
     else:
         letter = content
     return letter, response.get("timings", {}), raw_content

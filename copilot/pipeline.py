@@ -41,7 +41,10 @@ def solve(problem, index=None, k=0, exclude_id=None, image_b64=None, llm_url=URL
         result["answer"] = letter
         result["prompt_tokens"] = timings.get("prompt_n", 0)
         result["reasoning"] = raw_content if image_b64 else ""
-        if image_b64 and not re.search(r"\bANSWER\s*:\s*[A-E]\b", raw_content, re.IGNORECASE):
+        valid_vision_answer = re.fullmatch(
+            r"[A-E]", raw_content.strip(), re.IGNORECASE
+        ) or re.search(r"\bANSWER\s*:\s*[A-E]\b", raw_content, re.IGNORECASE)
+        if image_b64 and not valid_vision_answer:
             result["status"] = "invalid_response"
     except (socket.timeout, TimeoutError):
         result["status"] = "timeout"
