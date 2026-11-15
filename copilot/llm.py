@@ -21,9 +21,11 @@ TEXT_INSTRUCTIONS = (
     "valid ways or configurations. Reply with only one letter: A, B, C, D, or E."
 )
 VISION_SYSTEM = ("You solve a visual Kangaroo Math multiple-choice problem. The question text "
-                 "and answer choices are authoritative. First inspect the whole image and "
-                 "transcribe every relevant label, number, colour, shape, grid, table, path, "
-                 "and arrow; keep the diagram separate from the answer options. Then solve "
+                 "and answer choices are authoritative. First inspect the whole image. The "
+                 "layout may contain question text, then a table or diagram, then the five "
+                 "options at the bottom. Transcribe every relevant label, number, colour, "
+                 "shape, grid, table, path, and arrow; keep the figure separate from the "
+                 "options. Then solve "
                  "the exact question: calculate lengths, angles, perimeters, or areas; apply "
                  "rotations and other movements; compare shaded regions; follow paths or "
                  "patterns; or count objects and valid arrangements. Do not rely on apparent "
@@ -31,7 +33,8 @@ VISION_SYSTEM = ("You solve a visual Kangaroo Math multiple-choice problem. The 
                  "position. Use the diagram's rules and labels, match the result to the "
                  "corresponding choice, check it once, and reply only A, B, C, D, or E.")
 VISION_INSTRUCTIONS = (
-    "Inspect the whole image before solving. Use the diagram, labels, colours, arrows, and "
+    "Inspect the whole image before solving. The figure may be a table between the question "
+    "and the five options at the bottom. Use the diagram, labels, colours, arrows, and "
     "table/grid as evidence. If JSON choices are present, match the result to their exact "
     "letter. If they are missing, read the five options A), B), C), D), and E) at the bottom. "
     "For rotations, track positions before and after each turn; for areas, split or subtract "
@@ -66,10 +69,8 @@ def build_messages(problem, examples=(), image_b64=None):
         images = image_b64 if isinstance(image_b64, list) else [image_b64]
         content = [{"type": "text", "text": text}]
         for index, image in enumerate(images):
-            if len(images) == 1 and not problem.get("options"):
-                label = "FULL PROBLEM IMAGE: diagram/table and five options at bottom"
-            else:
-                label = "DIAGRAM IMAGE" if index == 0 else "ANSWER OPTIONS IMAGE"
+            label = ("FULL PROBLEM IMAGE: diagram/table and five options at bottom"
+                     if not problem.get("options") else "DIAGRAM/TABLE IMAGE")
             mime = "image/jpeg" if image.startswith("/9j/") else "image/png"
             content.append({"type": "text", "text": label + ":"})
             content.append({"type": "image_url",
