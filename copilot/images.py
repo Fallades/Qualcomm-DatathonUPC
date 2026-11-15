@@ -20,6 +20,7 @@ PADDING = 12
 DILATION_RADIUS = 4
 MIN_COMPONENT_AREA = 5
 OPTION_BAND_FRACTION = 0.35
+OPTION_SEARCH_TOP_FRACTION = 0.45
 
 
 def path_for(problem, image_dir):
@@ -345,8 +346,28 @@ def _options_jpeg(data):
         return data
     with Image.open(io.BytesIO(data)) as source:
         image = source.convert("L")
-        options_top = int(image.height * (1.0 - OPTION_BAND_FRACTION))
-        options = image.crop((0, options_top, image.width, image.height))
+        scale = max(1, (max(image.size) + MAX_MASK_SIDE - 1) // MAX_MASK_SIDE)
+        small = image.resize((max(1, image.width // scale),
+                              max(1, image.height // scale)),
+                             Image.Resampling.BILINEAR)
+        pixels = small.load()
+        search_top = int(small.height * OPTION_SEARCH_TOP_FRACTION)
+        points = [
+            (x, y)
+            for y in range(search_top, small.height)
+            for x in range(small.width)
+            if pixels[x, y] < MASK_THRESHOLD
+        ]
+        if not points:
+            options_top = int(image.height * (1.0 - OPTION_BAND_FRACTION))
+            box = (0, options_top, image.width, image.height)
+        else:
+            left = max(0, min(x for x, _ in points) * scale - PADDING)
+            top = max(0, min(y for _, y in points) * scale - PADDING)
+            right = min(image.width, (max(x for x, _ in points) + 1) * scale + PADDING)
+            bottom = min(image.height, (max(y for _, y in points) + 1) * scale + PADDING)
+            box = (left, top, right, bottom)
+        options = image.crop(box)
         options.thumbnail((FULL_IMAGE_MAX_SIDE, FULL_IMAGE_MAX_SIDE),
                           Image.Resampling.BILINEAR)
         output = io.BytesIO()
