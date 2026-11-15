@@ -13,14 +13,12 @@ SYSTEM = ("You solve multiple-choice math competition problems for school studen
           "as part of the reasoning, eliminate choices that contradict the rules or result, "
           "and verify that the selected letter matches its value. For counting questions, "
           "distinguish the number of visible objects from the number of valid arrangements, "
-          "ways, or configurations requested. Reply in two lines: first `ANSWER: X`, then "
-          "`REASON:` with at most 12 words.")
+          "ways, or configurations requested. Reply with only one letter: A, B, C, D, or E.")
 TEXT_INSTRUCTIONS = (
     "Solve the exact question before answering. Use the available choices to reason and "
     "discard choices that are impossible or contradict the problem. Verify that the final "
     "letter matches its option value. Do not confuse counting visible objects with counting "
-    "valid ways or configurations. Reply first with `ANSWER: X`, then `REASON:` and at most "
-    "12 words."
+    "valid ways or configurations. Reply with only one letter: A, B, C, D, or E."
 )
 VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
                  "answer choices in the user message are authoritative. Read the problem "
@@ -82,13 +80,12 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 1 if image_b64 else 32,
+        "max_tokens": 1,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
+        "grammar": "root ::= [A-E]",
     }
-    if image_b64:
-        payload["grammar"] = "root ::= [A-E]"
     response = post(url, payload, timeout=timeout)
     raw_content = response["choices"][0]["message"]["content"].strip()
     content = raw_content.upper()
