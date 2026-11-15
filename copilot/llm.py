@@ -8,8 +8,11 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 
 # Keep the system prompt stable: llama-server caches the start of the prompt,
 # so text that never changes is only read once.
-SYSTEM = ("You solve multiple-choice math competition problems for school students. "
-          "Read the problem and the options, then reply with the letter of the correct option.")
+SYSTEM = ("You solve multiple-choice math competition problems for school students. Read the "
+          "question and all answer choices carefully. Solve the exact problem, use the choices "
+          "as part of the reasoning, eliminate choices that contradict the rules or result, "
+          "and verify that the selected letter matches its value. Reply with only the letter "
+          "of the correct option.")
 VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
                  "answer choices in the user message are authoritative. Read the problem "
                  "carefully and use the labeled diagram and answer-options images as the "
@@ -47,7 +50,10 @@ def build_messages(problem, examples=(), image_b64=None):
              "are missing, read all five choices in the ANSWER OPTIONS IMAGE. Verify that your "
              "chosen letter agrees with your reason. Reply first with `ANSWER: X` using only "
              "one letter, then write `REASON:` and at most 10 words. Do not write analysis."
-             if image_b64 else "\nAnswer:")
+             if image_b64 else
+             "\nSolve the exact question before answering. Use the available choices to reason "
+             "and discard choices that are impossible or contradict the problem. Verify that "
+             "the final letter matches its option value, then reply with only the letter.")
     if image_b64:
         images = image_b64 if isinstance(image_b64, list) else [image_b64]
         content = [{"type": "text", "text": text}]
