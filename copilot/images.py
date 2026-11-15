@@ -338,6 +338,22 @@ def _resize_jpeg(data):
         return output.getvalue()
 
 
+def _options_jpeg(data):
+    try:
+        from PIL import Image
+    except ImportError:
+        return data
+    with Image.open(io.BytesIO(data)) as source:
+        image = source.convert("L")
+        options_top = int(image.height * (1.0 - OPTION_BAND_FRACTION))
+        options = image.crop((0, options_top, image.width, image.height))
+        options.thumbnail((FULL_IMAGE_MAX_SIDE, FULL_IMAGE_MAX_SIDE),
+                          Image.Resampling.BILINEAR)
+        output = io.BytesIO()
+        options.save(output, format="PNG", optimize=False)
+        return output.getvalue()
+
+
 def load_b64(problem, image_dir, save_dir=None):
     path = path_for(problem, image_dir)
     if not os.path.isfile(path):
@@ -345,14 +361,17 @@ def load_b64(problem, image_dir, save_dir=None):
     with open(path, "rb") as image:
         data = image.read()
     if data[:2] == b"\xff\xd8":
-        # Without OCR options, the image may contain pictorial answer choices.
-        # Keep the whole image so the vision model can inspect every choice.
-        focused = (_focus_jpeg(data, include_options=True)
-                   if not problem.get("options") else _focus_jpeg(data))
+        focused = ([_focus_jpeg(data), _options_jpeg(data)]
+                   if not problem.get("options") else [_focus_jpeg(data)])
     else:
-        focused = _focus_png(data)
+        focused = ([_focus_png(data), data]
+                   if not problem.get("options") else [_focus_png(data)])
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
-        with open(os.path.join(save_dir, os.path.basename(path)), "wb") as output:
-            output.write(focused)
-    return base64.b64encode(focused).decode("ascii")
+        stem, extension = os.path.splitext(os.path.basename(path))
+        labels = ("diagram", "options") if len(focused) == 2 else ("diagram",)
+        for label, image_data in zip(labels, focused):
+            output_path = os.path.join(save_dir, f"{stem}_{label}{extension}")
+            with open(output_path, "wb") as output:
+                output.write(image_data)
+    return [base64.b64encode(image).decode("ascii") for image in focused]

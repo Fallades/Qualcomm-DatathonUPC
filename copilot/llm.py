@@ -12,8 +12,8 @@ SYSTEM = ("You solve multiple-choice math competition problems for school studen
           "Read the problem and the options, then reply with the letter of the correct option.")
 VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
                  "answer choices in the user message are authoritative. Read the problem "
-                 "carefully and use the image as the "
-                 "diagram or visual evidence needed to solve them. First solve the exact "
+                 "carefully and use the labeled diagram and answer-options images as the "
+                 "visual evidence needed to solve it. First solve the exact "
                  "question: apply its rules, relationships, order, paths, patterns, or "
                  "calculations. Then match the result or valid condition to the corresponding "
                  "choice letter. Do not select a letter from the diagram's position or from a "
@@ -44,14 +44,19 @@ def build_messages(problem, examples=(), image_b64=None):
             format_problem(problem, sees_image=bool(image_b64)))
     text += ("\nUse the diagram as evidence, but solve the exact question in the JSON text. "
              "If JSON choices are present, match your result to their exact letter. If they "
-             "are missing, read all five choices at the bottom of the image. Verify that your "
+             "are missing, read all five choices in the ANSWER OPTIONS IMAGE. Verify that your "
              "chosen letter agrees with your reason. Reply first with `ANSWER: X` using only "
              "one letter, then write `REASON:` and at most 10 words. Do not write analysis."
              if image_b64 else "\nAnswer:")
     if image_b64:
-        mime = "image/jpeg" if image_b64.startswith("/9j/") else "image/png"
-        content = [{"type": "text", "text": text},
-                   {"type": "image_url", "image_url": {"url": f"data:{mime};base64," + image_b64}}]
+        images = image_b64 if isinstance(image_b64, list) else [image_b64]
+        content = [{"type": "text", "text": text}]
+        for index, image in enumerate(images):
+            label = "DIAGRAM IMAGE" if index == 0 else "ANSWER OPTIONS IMAGE"
+            mime = "image/jpeg" if image.startswith("/9j/") else "image/png"
+            content.append({"type": "text", "text": label + ":"})
+            content.append({"type": "image_url",
+                            "image_url": {"url": f"data:{mime};base64," + image}})
     else:
         content = text
     messages.append({"role": "user", "content": content})
