@@ -11,12 +11,16 @@ URL = f"http://127.0.0.1:{CONFIG['LLM_PORT']}/v1/chat/completions"
 SYSTEM = ("You solve multiple-choice math competition problems for school students. Read the "
           "question and all answer choices carefully. Solve the exact problem, use the choices "
           "as part of the reasoning, eliminate choices that contradict the rules or result, "
-          "and verify that the selected letter matches its value. Reply with only the letter "
-          "of the correct option.")
+          "and verify that the selected letter matches its value. For counting questions, "
+          "distinguish the number of visible objects from the number of valid arrangements, "
+          "ways, or configurations requested. Reply in two lines: first `ANSWER: X`, then "
+          "`REASON:` with at most 12 words.")
 TEXT_INSTRUCTIONS = (
     "Solve the exact question before answering. Use the available choices to reason and "
     "discard choices that are impossible or contradict the problem. Verify that the final "
-    "letter matches its option value, then reply with only the letter."
+    "letter matches its option value. Do not confuse counting visible objects with counting "
+    "valid ways or configurations. Reply first with `ANSWER: X`, then `REASON:` and at most "
+    "12 words."
 )
 VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question text and "
                  "answer choices in the user message are authoritative. Read the problem "
@@ -25,13 +29,15 @@ VISION_SYSTEM = ("You solve a visual multiple-choice math problem. The question 
                  "question: apply its rules, relationships, order, paths, patterns, or "
                  "calculations. Then match the result or valid condition to the corresponding "
                  "choice letter. Do not select a letter from the diagram's position or from a "
-                 "simple visual count. Before replying, check that the letter matches the "
-                 "correct choice. Reply with only the letter A, B, C, D, or E.")
+                 "simple visual count; distinguish visible objects from valid ways or "
+                 "configurations. Before replying, check that the letter matches the correct "
+                 "choice. Reply with only the letter A, B, C, D, or E.")
 VISION_INSTRUCTIONS = (
     "Use the diagram in the DIAGRAM IMAGE as evidence, but solve the exact question in the JSON text. If JSON "
     "choices are present, match your result to their exact letter. If they are missing, read "
     "all five choices in the ANSWER OPTIONS IMAGE. Verify the choice, then reply with only one "
-    "letter: A, B, C, D, or E."
+    "letter: A, B, C, D, or E. Do not confuse visible object counts with the number of valid "
+    "ways or configurations requested."
 )
 
 
@@ -76,12 +82,13 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
     """Return (letter, timings, raw_content), allowing concise vision reasoning."""
     payload = {
         "messages": build_messages(problem, examples, image_b64),
-        "max_tokens": 1,
+        "max_tokens": 1 if image_b64 else 32,
         "temperature": 0,
         "seed": int(CONFIG["SEED"]),
         "cache_prompt": True,
     }
-    payload["grammar"] = "root ::= [A-E]"
+    if image_b64:
+        payload["grammar"] = "root ::= [A-E]"
     response = post(url, payload, timeout=timeout)
     raw_content = response["choices"][0]["message"]["content"].strip()
     content = raw_content.upper()
@@ -95,5 +102,8 @@ def answer_letter(problem, examples=(), timeout=60, image_b64=None, url=URL):
             content if re.fullmatch(r"[A-E]", content)
             else CONFIG["FALLBACK_ANSWER"])
     else:
-        letter = content
+        matches = re.findall(r"\bANSWER\s*:\s*([A-E])\b", content)
+        letter = matches[-1] if matches else (
+            content if re.fullmatch(r"[A-E]", content)
+            else CONFIG["FALLBACK_ANSWER"])
     return letter, response.get("timings", {}), raw_content
