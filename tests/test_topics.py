@@ -8,6 +8,14 @@ class TopicClassificationTests(unittest.TestCase):
         result = classify_text("A square has a perimeter of 36 cm. What is its area?")
         self.assertEqual(result["topic"], "geometry")
 
+    def test_perfect_square_and_cube_are_number_theory(self):
+        result = classify_text(
+            "Let A be the smallest positive integer such that 10A is a perfect square "
+            "and 6A is a perfect cube. How many positive divisors does A have?"
+        )
+        self.assertEqual(result["topic"], "number_theory")
+        self.assertNotIn("geometry", result["topic_scores"])
+
     def test_catalan_combinatorics(self):
         result = classify_text("De quantes maneres podem ordenar cinc llibres?")
         self.assertEqual(result["topic"], "combinatorics")

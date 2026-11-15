@@ -37,9 +37,9 @@ _RULES = {
         (r"\b(ecuaci[oó]|inc[oó]gnita|variable|expresi[oó]|sistema de ecuaciones|polinomio|factoriz|simplific)\w*\b", 3),
     ],
     "number_theory": [
-        (r"\b(prime number|prime factor|divisib|divisor|multiple of|remainder|modulo|odd number|even number|digit(s)?|consecutive integers|greatest common divisor|least common multiple)\b", 3),
-        (r"\b(nombre primer|factor primer|divisib|divisor|m[uú]ltiple|residu|m[oò]dul|parells?|senars?|xifra|nombres consecutius|m[aà]xim com[uú] divisor|m[ií]nim com[uú] m[uú]ltiple)\b", 3),
-        (r"\b(n[uú]mero primo|factor primo|divisib|divisor|m[uú]ltiplo|resto|m[oó]dulo|pares?|impares?|cifra|n[uú]meros consecutivos|m[aá]ximo com[uú]n divisor|m[ií]nimo com[uú]n m[uú]ltiplo)\b", 3),
+        (r"\b(perfect squares?|perfect cubes?|square roots?|cube roots?|number of divisors?|prime number|prime factor|divisib|divisors?|multiples? of|common multiple|remainder|modulo|odd number|even number|digit(s)?|consecutive integers|greatest common divisor|least common multiple)\b", 3),
+        (r"\b(quadrat[s]? perfecte[s]?|cub[s]? perfecte[s]?|arrel[s]? quadrada[s]?|arrel[s]? c[uú]bica[s]?|nombre de divisors?|nombre primer|factor primer|divisib|divisor[s]?|m[uú]ltiple[s]?|residu|m[oò]dul|parells?|senars?|xifra|nombres consecutius|m[aà]xim com[uú] divisor|m[ií]nim com[uú] m[uú]ltiple)\b", 3),
+        (r"\b(cuadrados? perfectos?|cubos? perfectos?|ra[ií]ces? cuadradas?|ra[ií]ces? c[uú]bicas?|n[uú]mero de divisores?|n[uú]mero primo|factor primo|divisib|divisores?|m[uú]ltiplos?|resto|m[oó]dulo|pares?|impares?|cifra|n[uú]meros consecutivos|m[aá]ximo com[uú]n divisor|m[ií]nimo com[uú]n m[uú]ltiplo)\b", 3),
     ],
     "combinatorics": [
         (r"\b(how many ways|in how many ways|arrange|排列|permutation|combination|choose from|different arrangements|possible numbers|ways can|count the number|seating arrangement)\b", 3),
@@ -84,9 +84,19 @@ def classify_text(text: str) -> dict:
     """Return ``topic``, ``topic_confidence`` and per-topic rule scores."""
     source = _normalise(text or "")
     scores = Counter()
+    # "Perfect square/cube" and roots describe number properties, not geometric
+    # shapes. Remove those phrases only from the geometry matching pass; keep
+    # the original text for number theory and every other topic.
+    geometry_source = re.sub(
+        r"\b(?:perfect\s+(?:squares?|cubes?)|square\s+roots?|cube\s+roots?|"
+        r"quadrats?\s+perfectes?|cubs?\s+perfectes?|arrels?\s+quadrades?|arrels?\s+c[uú]biques?|"
+        r"cuadrados?\s+perfectos?|cubos?\s+perfectos?|ra[ií]ces?\s+cuadradas?|ra[ií]ces?\s+c[uú]bicas?)\b",
+        " ", source, flags=re.IGNORECASE,
+    )
     for topic, rules in _RULES.items():
+        topic_source = geometry_source if topic == "geometry" else source
         for pattern, weight in rules:
-            if re.search(pattern, source, flags=re.IGNORECASE):
+            if re.search(pattern, topic_source, flags=re.IGNORECASE):
                 scores[topic] += weight
     # Mathematical symbols are useful for short arithmetic questions such as
     # "What is 2 + 3 × 4?", where there may be no natural-language keywords.

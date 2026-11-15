@@ -9,6 +9,7 @@ Every run writes per-problem results to results/ and adds one line to
 results/ablations.csv, so you can build your ablation table as you go.
 """
 import argparse
+import base64
 import csv
 import json
 import os
@@ -45,6 +46,10 @@ def main():
     p.add_argument("--rag", type=int, default=0, metavar="K")
     p.add_argument("--index", default="data/index.db")
     p.add_argument("--name", default="", help="a label for this experiment in ablations.csv")
+    p.add_argument("--vision", action="store_true",
+                   help="send available problem images to the local multimodal server")
+    p.add_argument("--images", default="data/images",
+                   help="folder with <id>_<language>.png files (used only with --vision)")
     args = p.parse_args()
 
     with open(args.input) as f:
@@ -63,22 +68,43 @@ def main():
 
     os.makedirs("results", exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    name = args.name or (f"rag{args.rag}" if args.rag else "baseline")
+    if args.name:
+        name = args.name
+    elif args.vision and args.rag:
+        name = f"vision-rag{args.rag}"
+    elif args.vision:
+        name = "vision"
+    else:
+        name = f"rag{args.rag}" if args.rag else "baseline"
     detail_path = f"results/eval-{stamp}-{name}.csv"
 
     rows = []
     with open(detail_path, "w", newline="") as out:
         writer = csv.writer(out)
-        writer.writerow(["id", "language", "level", "has_options", "label", "answer",
+        writer.writerow(["id", "language", "level", "has_options", "image_sent", "label", "answer",
                          "correct", "seconds", "status", "prompt_tokens", "retrieved"])
         for n, problem in enumerate(problems, 1):
-            result = solve(problem, index=index, k=args.rag, exclude_id=problem["id"])
+            image_b64 = None
+            if args.vision:
+                image_name = f"{problem['id']}_{problem.get('language', 'eng')}.png"
+                image_path = os.path.join(args.images, image_name)
+                if os.path.isfile(image_path):
+                    with open(image_path, "rb") as image_file:
+                        image_b64 = base64.b64encode(image_file.read()).decode("ascii")
+            kwargs = {}
+            if image_b64:
+                kwargs = {
+                    "image_b64": image_b64,
+                    "llm_url": f"http://127.0.0.1:{CONFIG['VISION_PORT']}/v1/chat/completions",
+                }
+            result = solve(problem, index=index, k=args.rag, exclude_id=problem["id"], **kwargs)
             correct = result["answer"] == problem["label"]
-            row = {**problem, **result, "correct": correct, "has_options": bool(problem.get("options"))}
+            row = {**problem, **result, "correct": correct, "has_options": bool(problem.get("options")),
+                   "image_sent": bool(image_b64)}
             rows.append(row)
             writer.writerow([problem["id"], problem["language"], problem["level"], row["has_options"],
-                             problem["label"], result["answer"], int(correct), result["seconds"],
-                             result["status"], result["prompt_tokens"], result["retrieved"]])
+                             row["image_sent"], problem["label"], result["answer"], int(correct),
+                             result["seconds"], result["status"], result["prompt_tokens"], result["retrieved"]])
             out.flush()
             running = 100 * sum(r["correct"] for r in rows) / len(rows)
             print(f"[{n}/{len(problems)}] {problem['id']} {problem['language']}: "
@@ -99,7 +125,8 @@ def main():
     print(f"Status: {dict(Counter(r['status'] for r in rows))}")
 
     for field, title in (("language", "By language"), ("level", "By level"),
-                         ("has_options", "By whether OCR found the options")):
+                         ("has_options", "By whether OCR found the options"),
+                         ("image_sent", "By whether the problem image was sent")):
         groups = defaultdict(list)
         for r in rows:
             groups[r[field]].append(r["correct"])
@@ -120,6 +147,9 @@ def main():
         writer.writerow([stamp, name, git_commit(), args.input, args.languages or "all", len(rows),
                          args.rag, f"{accuracy:.1f}", f"{statistics.mean(seconds):.1f}",
                          f"{max(seconds):.1f}", over])
+    if args.vision:
+        sent = sum(bool(r.get("image_sent")) for r in rows)
+        print(f"Images sent to the vision model: {sent}/{len(rows)}")
     print(f"\nDetails: {detail_path}\nAblation log: {log}")
 
 

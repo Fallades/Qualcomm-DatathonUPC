@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -27,7 +27,7 @@ def read_jsonl(path):
         return [json.loads(line) for line in stream if line.strip()]
 
 
-def make_handler(tutor, languages):
+def make_handler(tutor, languages, images_dir="data/images"):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
             sys.stderr.write("  " + fmt % args + "\n")
@@ -51,17 +51,56 @@ def make_handler(tutor, languages):
             self.end_headers()
             self.wfile.write(data)
 
+        def send_image_file(self, path):
+            with open(path, "rb") as stream:
+                data = stream.read()
+            if data.startswith(b"\x89PNG\r\n\x1a\n"):
+                content_type = "image/png"
+            elif data.startswith(b"\xff\xd8\xff"):
+                content_type = "image/jpeg"
+            elif data.startswith((b"GIF87a", b"GIF89a")):
+                content_type = "image/gif"
+            elif data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+                content_type = "image/webp"
+            else:
+                return self.send_json(415, {"error": "El format de la imatge no és compatible."})
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "public, max-age=3600")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            self.wfile.write(data)
+
         def body(self):
             length = int(self.headers.get("Content-Length", "0"))
             if length > 16_384:
                 raise TutorError("La petició és massa gran.")
             return json.loads(self.rfile.read(length) or b"{}")
 
+        def problem_with_image(self, problem):
+            if not problem:
+                return problem
+            filename = f"{problem.get('id', '')}_{problem.get('language', 'eng')}.png"
+            image_path = os.path.join(images_dir, filename)
+            if os.path.isfile(image_path):
+                return {**problem, "image_url": "/images/" + quote(filename)}
+            return problem
+
         def do_GET(self):
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
             student_id = params.get("student_id", [""])[0]
             try:
+                if parsed.path.startswith("/images/"):
+                    requested = unquote(parsed.path[len("/images/"):])
+                    filename = os.path.basename(requested)
+                    image_path = os.path.realpath(os.path.join(images_dir, filename))
+                    images_root = os.path.realpath(images_dir) + os.sep
+                    if (requested != filename or not filename.lower().endswith(".png")
+                            or not image_path.startswith(images_root) or not os.path.isfile(image_path)):
+                        return self.send_json(404, {"error": "No s'ha trobat la imatge de l'exercici."})
+                    return self.send_image_file(image_path)
                 if parsed.path == "/":
                     return self.send_file(os.path.join(ROOT, "explorer", "tutor.html"), "text/html; charset=utf-8")
                 if parsed.path == "/api/meta":
@@ -71,7 +110,7 @@ def make_handler(tutor, languages):
                 if parsed.path == "/api/profile":
                     return self.send_json(200, tutor.profile(student_id))
                 if parsed.path == "/api/current":
-                    return self.send_json(200, {"problem": tutor.current(student_id)})
+                    return self.send_json(200, {"problem": self.problem_with_image(tutor.current(student_id))})
                 return self.send_json(404, {"error": "No s'ha trobat la ruta."})
             except (TutorError, ValueError, KeyError) as error:
                 return self.send_json(400, {"error": str(error)})
@@ -83,12 +122,14 @@ def make_handler(tutor, languages):
                 if self.path == "/api/start":
                     problem = tutor.start(student_id, language=payload.get("language", "cat"),
                                           topic=payload.get("topic", ""),
-                                          start_level=payload.get("start_level", 1))
-                    return self.send_json(200, {"problem": problem, "profile": tutor.profile(student_id)})
+                                          start_level=payload.get("start_level"))
+                    return self.send_json(200, {"problem": self.problem_with_image(problem),
+                                                "profile": tutor.profile(student_id)})
                 if self.path == "/api/next":
                     problem = tutor.next_problem(student_id, language=payload.get("language"),
                                                  topic=payload.get("topic", ""))
-                    return self.send_json(200, {"problem": problem, "profile": tutor.profile(student_id)})
+                    return self.send_json(200, {"problem": self.problem_with_image(problem),
+                                                "profile": tutor.profile(student_id)})
                 if self.path == "/api/answer":
                     result = tutor.submit_answer(student_id, payload.get("choice"))
                     return self.send_json(200, result)
@@ -106,6 +147,8 @@ def main():
     parser.add_argument("--input", default="data/train_topics.jsonl")
     parser.add_argument("--index", default="data/index.db")
     parser.add_argument("--db", default="results/student_profiles.db")
+    parser.add_argument("--images", default="data/images",
+                        help="folder containing <id>_<language>.png exercise images")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
     args = parser.parse_args()
@@ -118,10 +161,15 @@ def main():
     languages = sorted({p.get("language") for p in tutor.problems if p.get("language")})
     if not tutor.problems:
         parser.error("No hi ha exercicis amb les cinc opcions OCR llegides.")
+    image_count = sum(
+        os.path.isfile(os.path.join(args.images, f"{p.get('id', '')}_{p.get('language', 'eng')}.png"))
+        for p in tutor.problems
+    )
     print(f"Tutor preparat: {len(tutor.problems)} exercicis amb opcions completes; "
-          f"{len(languages)} idiomes; índex {'disponible' if index else 'no disponible'}.")
+          f"{len(languages)} idiomes; {image_count} imatges disponibles; "
+          f"índex {'disponible' if index else 'no disponible'}.")
     print(f"Obre http://{args.host}:{args.port} (Ctrl+C per aturar)", flush=True)
-    ThreadingHTTPServer((args.host, args.port), make_handler(tutor, languages)).serve_forever()
+    ThreadingHTTPServer((args.host, args.port), make_handler(tutor, languages, args.images)).serve_forever()
 
 
 if __name__ == "__main__":

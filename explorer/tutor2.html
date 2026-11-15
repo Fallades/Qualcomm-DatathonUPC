@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tutor de matemàtiques adaptatiu</title>
+<style>
+  :root { color-scheme: light; --ink:#202838; --muted:#637083; --line:#dce2ea; --bg:#f4f6f9; --card:#fff; --accent:#315fba; --ok:#187443; --okbg:#e9f6ee; --bad:#b42318; --badbg:#fff0ee; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { background:var(--card); border-bottom:1px solid var(--line); padding:18px max(20px,calc((100vw - 1100px)/2)); }
+  h1 { margin:0; font-size:22px; } header p { margin:4px 0 0; color:var(--muted); }
+  main { max-width:1100px; margin:24px auto; padding:0 18px; display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; }
+  section, aside { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; min-width:0; }
+  .setup { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; align-items:end; }
+  label { display:block; font-size:13px; font-weight:650; color:var(--muted); }
+  input,select { display:block; width:100%; padding:10px; margin-top:5px; border:1px solid var(--line); border-radius:7px; background:white; color:var(--ink); font:inherit; }
+  button { font:inherit; cursor:pointer; border-radius:8px; padding:10px 14px; }
+  button:disabled { opacity:.5; cursor:default; }
+  .primary { background:var(--accent); color:#fff; border:1px solid var(--accent); font-weight:650; }
+  .secondary { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .muted { color:var(--muted); font-size:13px; }
+  #problem-panel { margin-top:18px; }
+  .meta { color:var(--muted); font-size:13px; margin-bottom:10px; }
+  #question { white-space:pre-wrap; font-size:18px; margin:8px 0 16px; }
+  #options { display:grid; gap:9px; }
+  .option { display:flex; align-items:flex-start; gap:12px; width:100%; text-align:left; border:1px solid var(--line); background:#fff; }
+  .letter { flex:0 0 30px; height:30px; border-radius:50%; display:grid; place-items:center; background:#eef2f8; font-weight:750; }
+  .option.correct { border-color:var(--ok); background:var(--okbg); }
+  .option.wrong { border-color:var(--bad); background:var(--badbg); }
+  .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
+  #feedback { margin-top:14px; font-weight:650; }
+  #feedback.ok { color:var(--ok); } #feedback.bad { color:var(--bad); }
+  #hint-box { display:grid; gap:12px; margin-top:14px; }
+  #hint-box[hidden] { display:none; }
+  .hint-card { padding:16px; background:#f1f5fb; border:1px solid #dce6f4; border-radius:10px; }
+  .hint-card h3 { margin:0 0 8px; font-size:16px; }
+  .hint-explanation { margin:0; white-space:pre-wrap; }
+  .hint-visual { margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:#26364d; font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-x:auto; }
+  .hint-action { margin:10px 0 0; padding:10px 12px; border-left:3px solid var(--accent); background:#fff; border-radius:5px; }
+  .hint-note { display:block; margin-top:10px; color:var(--muted); font-size:12px; }
+  .example { margin-top:10px; padding:10px; background:white; border:1px solid var(--line); border-radius:8px; }
+  aside h2, section h2 { margin:0 0 12px; font-size:17px; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px; }
+  .stat { background:var(--bg); border-radius:8px; padding:10px; }
+  .stat strong { display:block; font-size:22px; }
+  .topic-row { margin:12px 0; }
+  .topic-top { display:flex; justify-content:space-between; gap:10px; font-size:13px; }
+  .track { height:8px; margin-top:5px; border-radius:99px; background:#e8ecf2; overflow:hidden; }
+  .bar { height:100%; background:var(--accent); }
+  #status { margin-top:12px; min-height:1.5em; color:var(--muted); font-size:13px; }
+  /* Imatge de l'exercici */
+  .problem-image-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin: 12px auto 18px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .problem-image {
+    display: block;
+    max-width: 100%;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  @media(max-width:800px) { main { grid-template-columns:1fr; } .setup { grid-template-columns:1fr 1fr; } }
+  @media(max-width:480px) { .setup { grid-template-columns:1fr; } section,aside { padding:15px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tutor de matemàtiques adaptatiu</h1>
+  <p>Practica, rep pistes pas a pas i reforça els temes que et costen més.</p>
+</header>
+<main>
+  <div>
+    <section>
+      <h2>Comença la sessió</h2>
+      <div class="setup">
+        <label>Identificador d'estudiant
+          <input id="student" placeholder="p. ex. alumne-01" maxlength="64" autocomplete="off">
+        </label>
+        <label>Idioma
+          <select id="language"><option value="cat">Català</option><option value="eng">English</option><option value="esp">Español</option></select>
+        </label>
+        <label>Tema per practicar
+          <select id="topic"><option value="">Detecta les dificultats</option></select>
+        </label>
+      </div>
+      <p class="muted" style="margin:10px 0 0">El nivell inicial es tria automàticament segons els exercicis disponibles i s'ajusta a partir de les teves respostes.</p>
+      <div class="actions"><button class="primary" id="start">Comença / recupera la sessió</button></div>
+      <div id="status" aria-live="polite">Carregant el banc d'exercicis…</div>
+    </section>
+
+    <section id="problem-panel" hidden>
+      <div class="meta" id="meta"></div>
+      <div id="problem-image-wrap" class="problem-image-wrap" hidden>
+        <img id="problem-image" class="problem-image" alt="Figura original de l'exercici">
+      </div>
+      <h2>Resol l'exercici</h2>
+      <div id="question"></div>
+      <div id="options"></div>
+      <div id="feedback" aria-live="polite"></div>
+      <div class="actions">
+        <button class="secondary" id="hint" disabled>Necessito una pista</button>
+        <button class="primary" id="next" hidden>Següent exercici</button>
+      </div>
+      <div id="hint-box" hidden aria-live="polite"></div>
+    </section>
+  </div>
+
+  <aside>
+    <h2>El teu progrés</h2>
+    <div class="stats">
+      <div class="stat"><strong id="total">0</strong><span class="muted">Exercicis</span></div>
+      <div class="stat"><strong id="accuracy">—</strong><span class="muted">Accuracy</span></div>
+    </div>
+    <div class="muted" id="weakest">Encara no hi ha prou dades per detectar un tema feble.</div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">
+    <h2>Resultats per tema</h2>
+    <div id="topic-progress" class="muted">Resol algun exercici per veure el teu progrés.</div>
+    <p class="muted" style="margin-top:18px">El perfil es desa localment al dispositiu que executa el tutor.</p>
+  </aside>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const api = async (path, body) => {
+  const response = await fetch(path, body ? {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)} : {});
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || response.statusText);
+  return data;
+};
+let meta = null;
+let current = null;
+let answered = false;
+let hintsUsed = 0;
+let hintRequestInProgress = false;
+const letters = "ABCDE";
+
+function setStatus(message) { $("status").textContent = message; }
+function studentId() { return $("student").value.trim(); }
+function requireStudentId() {
+  const id = studentId();
+  if (!id) {
+    setStatus("Escriu un àlies o codi d'estudiant per desar el progrés sense barrejar-lo amb altres sessions.");
+    $("student").focus();
+    return false;
+  }
+  return true;
+}
+function selectedLanguage() { return $("language").value; }
+function renderProfile(profile) {
+  $("total").textContent = profile.total;
+  $("accuracy").textContent = profile.accuracy == null ? "—" : profile.accuracy + "%";
+  $("weakest").textContent = profile.weakest_topic_label
+    ? "Tema que convé reforçar: " + profile.weakest_topic_label
+    : "Encara no hi ha prou dades per detectar un tema feble.";
+  const rows = profile.topics || [];
+  $("topic-progress").innerHTML = rows.length ? rows.map(item => `
+    <div class="topic-row">
+      <div class="topic-top"><span>${escapeHtml(item.label)}</span><b>${item.accuracy}% (${item.correct}/${item.total})</b></div>
+      <div class="track"><div class="bar" style="width:${Math.max(0,Math.min(100,item.accuracy))}%"></div></div>
+    </div>`).join("") : "Resol algun exercici per veure el teu progrés.";
+}
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function renderProblem(problem) {
+  current = problem;
+  answered = false;
+  hintsUsed = 0;
+  hintRequestInProgress = false;
+  if (!problem) { $("problem-panel").hidden = true; return; }
+  $("problem-panel").hidden = false;
+  $("meta").textContent = `${meta.topics[problem.topic] || problem.topic} · Nivell ${problem.level} · ${problem.language}`;
+  $("question").textContent = problem.text;
+  const imageWrap = $("problem-image-wrap");
+  const problemImage = $("problem-image");
+  if (problem.image_url) {
+    problemImage.src = problem.image_url;
+    problemImage.alt = `Figura de l'exercici ${problem.id}`;
+    imageWrap.hidden = false;
+  } else {
+    problemImage.removeAttribute("src");
+    imageWrap.hidden = true;
+  }
+  const options = $("options");
+  options.replaceChildren();
+  for (const letter of letters) {
+    if (!problem.options || !(letter in problem.options)) continue;
+    const button = document.createElement("button");
+    button.className = "option";
+    button.dataset.letter = letter;
+    const tag = document.createElement("span");
+    tag.className = "letter";
+    tag.textContent = letter;
+    const content = document.createElement("span");
+    content.textContent = problem.options[letter];
+    button.append(tag, content);
+    button.addEventListener("click", () => submitAnswer(letter));
+    options.append(button);
+  }
+  $("feedback").textContent = "";
+  $("feedback").className = "";
+  $("hint-box").hidden = true;
+  $("hint-box").replaceChildren();
+  $("hint").disabled = false;
+  $("hint").textContent = "Necessito una pista (0/3)";
+  $("next").hidden = true;
+  if (!options.children.length) {
+    $("feedback").textContent = "Aquest exercici no té les cinc opcions llegides per OCR. No es pot practicar amb seguretat.";
+    $("hint").disabled = true;
+    $("next").hidden = false;
+  }
+}
+async function startSession() {
+  if (!requireStudentId()) return;
+  try {
+    setStatus("Preparant la sessió…");
+    const result = await api("/api/start", {
+      student_id:studentId(), language:selectedLanguage(), topic:$("topic").value
+    });
+    renderProblem(result.problem);
+    renderProfile(result.profile);
+    setStatus("Sessió preparada. El nivell s'adaptarà automàticament segons les teves respostes.");
+  } catch (error) { setStatus(error.message); }
+}
+async function submitAnswer(letter) {
+  if (!current || answered) return;
+  answered = true;
+  document.querySelectorAll("#options button").forEach(button => button.disabled = true);
+  try {
+    const result = await api("/api/answer", {student_id:studentId(),choice:letter});
+    document.querySelectorAll("#options button").forEach(button => {
+      if (button.dataset.letter === result.label) button.classList.add("correct");
+      else if (button.dataset.letter === letter) button.classList.add("wrong");
+    });
+    $("feedback").textContent = result.correct
+      ? "Correcte! El tutor ajustarà el nivell i continuarà detectant quins temes domines."
+      : `Encara no. La resposta correcta era ${result.label}. El tutor ajustarà el nivell i reforçarà aquest tipus de raonament.`;
+    $("feedback").className = result.correct ? "ok" : "bad";
+    $("hint").disabled = true;
+    $("next").hidden = false;
+    renderProfile(result.profile);
+    setStatus("Resposta desada al perfil de l'estudiant.");
+  } catch (error) { answered = false; setStatus(error.message); }
+}
+async function requestHint() {
+  if (!current || answered || hintRequestInProgress || hintsUsed >= 3) return;
+  hintRequestInProgress = true;
+  const button = $("hint");
+  button.disabled = true;
+  button.textContent = "Preparant la pista…";
+  setStatus("Preparant una pista específica d'aquest exercici. La primera pot trigar una mica més…");
+  try {
+    const hint = await api("/api/hint", {student_id:studentId()});
+    hintsUsed = hint.stage;
+    const box = $("hint-box");
+    box.hidden = false;
+    const card = document.createElement("article");
+    card.className = "hint-card";
+    const title = document.createElement("h3");
+    title.textContent = hint.title || `Pista ${hint.stage} de 3`;
+    const explanation = document.createElement("p");
+    explanation.className = "hint-explanation";
+    explanation.textContent = hint.explanation || hint.text || "No s'ha pogut generar el contingut de la pista.";
+    card.append(title, explanation);
+    if (hint.visual) {
+      const visual = document.createElement("pre");
+      visual.className = "hint-visual";
+      visual.textContent = hint.visual;
+      card.append(visual);
+    }
+    if (hint.action) {
+      const action = document.createElement("p");
+      action.className = "hint-action";
+      action.textContent = "Prova ara: " + hint.action;
+      card.append(action);
+    }
+    if (hint.kind === "fallback") {
+      const note = document.createElement("small");
+      note.className = "hint-note";
+      note.textContent = hint.note || "Pista local de suport adaptada a l'enunciat i al tema.";
+      card.append(note);
+    }
+    box.append(card);
+    if (hintsUsed >= 3) {
+      button.disabled = true;
+      button.textContent = "Has utilitzat les 3 pistes";
+      setStatus("Ja has vist les tres pistes. Ara pots respondre o passar al següent exercici.");
+    } else {
+      button.disabled = false;
+      button.textContent = `Una altra pista (${hintsUsed}/3)`;
+      setStatus(`Pista ${hintsUsed} de 3. Encara en tens ${3 - hintsUsed}.`);
+    }
+  } catch (error) {
+    if (error.message.includes("Ja has utilitzat les tres pistes")) {
+      hintsUsed = 3;
+      button.disabled = true;
+      button.textContent = "Has utilitzat les 3 pistes";
+      setStatus("Ja has vist les tres pistes. Ara pots respondre o passar al següent exercici.");
+    } else {
+      button.disabled = hintsUsed >= 3;
+      button.textContent = hintsUsed >= 3 ? "Has utilitzat les 3 pistes" : `Demanar una altra pista (${hintsUsed}/3)`;
+      setStatus(error.message);
+    }
+  } finally {
+    hintRequestInProgress = false;
+  }
+}
+
+async function nextProblem() {
+  try {
+    setStatus("Buscant el següent exercici…");
+    const result = await api("/api/next", {student_id:studentId(),language:selectedLanguage(),topic:$("topic").value});
+    renderProblem(result.problem);
+    renderProfile(result.profile);
+    setStatus("Nou exercici seleccionat segons el teu progrés.");
+  } catch (error) { setStatus(error.message); }
+}
+async function init() {
+  try {
+    meta = await api("/api/meta");
+    const topicSelect = $("topic");
+    Object.entries(meta.topics).filter(([key]) => key !== "other").forEach(([key,label]) => {
+      const option = document.createElement("option"); option.value = key; option.textContent = label; topicSelect.append(option);
+    });
+    const langs = meta.languages;
+    Array.from($("language").options).forEach(option => { option.disabled = !langs.includes(option.value); });
+    if (!langs.includes($("language").value) && langs.length) $("language").value = langs[0];
+    setStatus(`${meta.problems} exercicis disponibles${meta.with_index ? " · cerca per exercicis semblants activada" : " · selecció per tema i nivell"}.`);
+  } catch (error) { setStatus(error.message); $("start").disabled = true; }
+}
+$("start").addEventListener("click", startSession);
+$("hint").addEventListener("click", requestHint);
+$("next").addEventListener("click", nextProblem);
+init();
+</script>
+</body>
+</html>

@@ -11,11 +11,13 @@ Output: a CSV with id, language, answer, seconds, status.
 Rules: runs offline, at most 60 seconds per problem, deterministic.
 """
 import argparse
+import base64
 import csv
 import json
 import os
 import sys
 
+from copilot.config import CONFIG
 from copilot.pipeline import solve
 
 
@@ -25,6 +27,10 @@ def main():
     p.add_argument("--output", required=True)
     p.add_argument("--rag", type=int, default=0, metavar="K", help="add K similar solved problems")
     p.add_argument("--index", default="data/index.db")
+    p.add_argument("--vision", action="store_true",
+                   help="send available problem images to the local multimodal server")
+    p.add_argument("--images", default="data/images",
+                   help="folder with <id>_<language>.png files (used only with --vision)")
     args = p.parse_args()
 
     index = None
@@ -41,7 +47,17 @@ def main():
         writer = csv.writer(out)
         writer.writerow(["id", "language", "answer", "seconds", "status"])
         for n, problem in enumerate(problems, 1):
-            result = solve(problem, index=index, k=args.rag)
+            kwargs = {}
+            if args.vision:
+                image_name = f"{problem['id']}_{problem.get('language', 'eng')}.png"
+                image_path = os.path.join(args.images, image_name)
+                if os.path.isfile(image_path):
+                    with open(image_path, "rb") as image_file:
+                        kwargs = {
+                            "image_b64": base64.b64encode(image_file.read()).decode("ascii"),
+                            "llm_url": f"http://127.0.0.1:{CONFIG['VISION_PORT']}/v1/chat/completions",
+                        }
+            result = solve(problem, index=index, k=args.rag, **kwargs)
             writer.writerow([problem["id"], problem.get("language", ""), result["answer"],
                              result["seconds"], result["status"]])
             out.flush()

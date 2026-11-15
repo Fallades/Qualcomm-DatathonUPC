@@ -12,7 +12,7 @@
   h1 { margin:0; font-size:22px; } header p { margin:4px 0 0; color:var(--muted); }
   main { max-width:1100px; margin:24px auto; padding:0 18px; display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; }
   section, aside { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; min-width:0; }
-  .setup { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; align-items:end; }
+  .setup { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; align-items:end; }
   label { display:block; font-size:13px; font-weight:650; color:var(--muted); }
   input,select { display:block; width:100%; padding:10px; margin-top:5px; border:1px solid var(--line); border-radius:7px; background:white; color:var(--ink); font:inherit; }
   button { font:inherit; cursor:pointer; border-radius:8px; padding:10px 14px; }
@@ -31,9 +31,16 @@
   .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
   #feedback { margin-top:14px; font-weight:650; }
   #feedback.ok { color:var(--ok); } #feedback.bad { color:var(--bad); }
-  #hint-box { margin-top:14px; padding:14px; background:#f1f5fb; border-radius:8px; }
-  #hint-box h3 { margin:0 0 6px; font-size:15px; }
-  #hint-box ol { padding-left:22px; margin:8px 0 0; }
+  #hint-box { display:grid; gap:12px; margin-top:14px; }
+  #hint-box[hidden] { display:none; }
+  .hint-card { padding:16px; background:#f1f5fb; border:1px solid #dce6f4; border-radius:10px; }
+  .hint-card h3 { margin:0 0 8px; font-size:16px; }
+  .hint-explanation { margin:0; white-space:pre-wrap; }
+  .hint-visual { margin:12px 0; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:#26364d; font:13px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre-wrap; overflow-x:auto; }
+  .hint-action { margin:10px 0 0; padding:10px 12px; border-left:3px solid var(--accent); background:#fff; border-radius:5px; }
+  .hint-note { display:block; margin-top:10px; color:var(--muted); font-size:12px; }
+  .hint-loading { padding:13px 15px; border:1px dashed var(--line); border-radius:9px; color:var(--muted); background:#fff; }
+  .hint-error { padding:13px 15px; border:1px solid #f2c4bf; border-radius:9px; color:#8f2119; background:#fff4f2; }
   .example { margin-top:10px; padding:10px; background:white; border:1px solid var(--line); border-radius:8px; }
   aside h2, section h2 { margin:0 0 12px; font-size:17px; }
   .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px; }
@@ -44,6 +51,30 @@
   .track { height:8px; margin-top:5px; border-radius:99px; background:#e8ecf2; overflow:hidden; }
   .bar { height:100%; background:var(--accent); }
   #status { margin-top:12px; min-height:1.5em; color:var(--muted); font-size:13px; }
+  /* Imatge de l'exercici: centrada, sencera i limitada en alçada */
+  .problem-image-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    margin: 12px auto 18px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .problem-image {
+    display: block;
+    max-width: 100%;
+    max-height: 200px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+  }
+  @media(max-width:480px) {
+    .problem-image { max-height: 170px; }
+  }
   @media(max-width:800px) { main { grid-template-columns:1fr; } .setup { grid-template-columns:1fr 1fr; } }
   @media(max-width:480px) { .setup { grid-template-columns:1fr; } section,aside { padding:15px; } }
 </style>
@@ -59,7 +90,7 @@
       <h2>Comença la sessió</h2>
       <div class="setup">
         <label>Identificador d'estudiant
-          <input id="student" value="estudiant-1" maxlength="64" autocomplete="off">
+          <input id="student" placeholder="p. ex. alumne-01" maxlength="64" autocomplete="off">
         </label>
         <label>Idioma
           <select id="language"><option value="cat">Català</option><option value="eng">English</option><option value="esp">Español</option></select>
@@ -67,16 +98,17 @@
         <label>Tema per practicar
           <select id="topic"><option value="">Detecta les dificultats</option></select>
         </label>
-        <label>Nivell inicial (0–7)
-          <select id="level"><option>0</option><option selected>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
-        </label>
       </div>
+      <p class="muted" style="margin:10px 0 0">El nivell inicial es tria automàticament segons els exercicis disponibles i s'ajusta a partir de les teves respostes.</p>
       <div class="actions"><button class="primary" id="start">Comença / recupera la sessió</button></div>
       <div id="status" aria-live="polite">Carregant el banc d'exercicis…</div>
     </section>
 
     <section id="problem-panel" hidden>
       <div class="meta" id="meta"></div>
+      <div id="problem-image-wrap" class="problem-image-wrap" hidden>
+        <img id="problem-image" class="problem-image" alt="Figura original de l'exercici">
+      </div>
       <h2>Resol l'exercici</h2>
       <div id="question"></div>
       <div id="options"></div>
@@ -106,18 +138,31 @@
 const $ = id => document.getElementById(id);
 const api = async (path, body) => {
   const response = await fetch(path, body ? {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)} : {});
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || response.statusText);
+  const raw = await response.text();
+  let data = {};
+  try { data = raw ? JSON.parse(raw) : {}; }
+  catch (_) { data = {error: raw || `Resposta no vàlida del servidor (HTTP ${response.status}).`}; }
+  if (!response.ok) throw new Error(data.error || `Error del servidor (HTTP ${response.status}).`);
   return data;
 };
 let meta = null;
 let current = null;
 let answered = false;
 let hintsUsed = 0;
+let hintRequestInProgress = false;
 const letters = "ABCDE";
 
 function setStatus(message) { $("status").textContent = message; }
 function studentId() { return $("student").value.trim(); }
+function requireStudentId() {
+  const id = studentId();
+  if (!id) {
+    setStatus("Escriu un àlies o codi d'estudiant per desar el progrés sense barrejar-lo amb altres sessions.");
+    $("student").focus();
+    return false;
+  }
+  return true;
+}
 function selectedLanguage() { return $("language").value; }
 function renderProfile(profile) {
   $("total").textContent = profile.total;
@@ -135,14 +180,25 @@ function renderProfile(profile) {
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
-function renderProblem(problem) {
+function renderProblem(problem, hintStatus = {stage:0, remaining:3}) {
   current = problem;
   answered = false;
-  hintsUsed = 0;
+  hintsUsed = Math.max(0, Math.min(3, Number(hintStatus?.stage || 0)));
+  hintRequestInProgress = false;
   if (!problem) { $("problem-panel").hidden = true; return; }
   $("problem-panel").hidden = false;
   $("meta").textContent = `${meta.topics[problem.topic] || problem.topic} · Nivell ${problem.level} · ${problem.language}`;
   $("question").textContent = problem.text;
+  const imageWrap = $("problem-image-wrap");
+  const problemImage = $("problem-image");
+  if (problem.image_url) {
+    problemImage.src = problem.image_url;
+    problemImage.alt = `Figura de l'exercici ${problem.id}`;
+    imageWrap.hidden = false;
+  } else {
+    problemImage.removeAttribute("src");
+    imageWrap.hidden = true;
+  }
   const options = $("options");
   options.replaceChildren();
   for (const letter of letters) {
@@ -163,7 +219,10 @@ function renderProblem(problem) {
   $("feedback").className = "";
   $("hint-box").hidden = true;
   $("hint-box").replaceChildren();
-  $("hint").disabled = false;
+  $("hint").disabled = hintsUsed >= 3;
+  $("hint").textContent = hintsUsed >= 3
+    ? "Has utilitzat les 3 pistes"
+    : `Necessito una pista (${hintsUsed}/3)`;
   $("next").hidden = true;
   if (!options.children.length) {
     $("feedback").textContent = "Aquest exercici no té les cinc opcions llegides per OCR. No es pot practicar amb seguretat.";
@@ -172,15 +231,17 @@ function renderProblem(problem) {
   }
 }
 async function startSession() {
+  if (!requireStudentId()) return;
   try {
     setStatus("Preparant la sessió…");
     const result = await api("/api/start", {
-      student_id:studentId(), language:selectedLanguage(), topic:$("topic").value,
-      start_level:Number($("level").value)
+      student_id:studentId(), language:selectedLanguage(), topic:$("topic").value
     });
-    renderProblem(result.problem);
+    renderProblem(result.problem, result.hint_status);
     renderProfile(result.profile);
-    setStatus("Sessió preparada. Les respostes s'utilitzen per adaptar el nivell següent.");
+    setStatus(hintsUsed
+      ? `Sessió recuperada. Ja havies utilitzat ${hintsUsed} de 3 pistes en aquest exercici.`
+      : "Sessió preparada. El nivell s'adaptarà automàticament segons les teves respostes.");
   } catch (error) { setStatus(error.message); }
 }
 async function submitAnswer(letter) {
@@ -204,36 +265,87 @@ async function submitAnswer(letter) {
   } catch (error) { answered = false; setStatus(error.message); }
 }
 async function requestHint() {
-  if (!current || answered) return;
+  if (!current || answered || hintRequestInProgress || hintsUsed >= 3) return;
+  hintRequestInProgress = true;
+  const button = $("hint");
+  button.disabled = true;
+  button.textContent = "Preparant la pista…";
+  setStatus("Preparant una pista específica d'aquest exercici…");
+  const box = $("hint-box");
+  box.hidden = false;
+  box.replaceChildren();
+  const loading = document.createElement("div");
+  loading.className = "hint-loading";
+  loading.textContent = "Estic preparant una pista adaptada a aquest exercici…";
+  box.append(loading);
   try {
     const hint = await api("/api/hint", {student_id:studentId()});
-    hintsUsed++;
-    const box = $("hint-box");
-    box.hidden = false;
-    box.replaceChildren();
-    const title = document.createElement("h3"); title.textContent = hint.title; box.append(title);
-    const text = document.createElement("p"); text.textContent = hint.text; box.append(text);
-    if (hint.steps) {
-      const list = document.createElement("ol");
-      hint.steps.forEach(step => { const li = document.createElement("li"); li.textContent = step; list.append(li); });
-      box.append(list);
+    hintsUsed = hint.stage;
+    const card = document.createElement("article");
+    card.className = "hint-card";
+    const title = document.createElement("h3");
+    title.textContent = hint.title || `Pista ${hint.stage} de 3`;
+    const explanation = document.createElement("p");
+    explanation.className = "hint-explanation";
+    explanation.textContent = hint.explanation || hint.text || "No s'ha pogut generar el contingut de la pista.";
+    card.append(title, explanation);
+    if (hint.visual) {
+      const visual = document.createElement("pre");
+      visual.className = "hint-visual";
+      visual.textContent = hint.visual;
+      card.append(visual);
     }
-    if (hint.example) {
-      const example = document.createElement("div"); example.className = "example";
-      const heading = document.createElement("b"); heading.textContent = `Exemple resolt · nivell ${hint.example.level}`;
-      const statement = document.createElement("p"); statement.textContent = hint.example.text;
-      const answer = document.createElement("p"); answer.textContent = `Resposta de l'exemple: ${hint.example.answer}`;
-      example.append(heading, statement, answer); box.append(example);
+    if (hint.action) {
+      const action = document.createElement("p");
+      action.className = "hint-action";
+      action.textContent = "Prova ara: " + hint.action;
+      card.append(action);
     }
-    if (hint.stage >= 4) $("hint").disabled = true;
-    else $("hint").textContent = `Una altra pista (${hint.stage}/3)`;
-  } catch (error) { setStatus(error.message); }
+    if (hint.kind === "fallback") {
+      const note = document.createElement("small");
+      note.className = "hint-note";
+      note.textContent = hint.note || "Pista local de suport adaptada a l'enunciat i al tema.";
+      card.append(note);
+    }
+    box.replaceChildren(card);
+    if (hintsUsed >= 3) {
+      button.disabled = true;
+      button.textContent = "Has utilitzat les 3 pistes";
+      setStatus("Ja has vist les tres pistes. Ara pots respondre o passar al següent exercici.");
+    } else {
+      button.disabled = false;
+      button.textContent = `Una altra pista (${hintsUsed}/3)`;
+      setStatus(`Pista ${hintsUsed} de 3. Encara en tens ${3 - hintsUsed}.`);
+    }
+  } catch (error) {
+    if (error.message.includes("Ja has utilitzat les tres pistes")) {
+      hintsUsed = 3;
+      button.disabled = true;
+      button.textContent = "Has utilitzat les 3 pistes";
+      const message = document.createElement("div");
+      message.className = "hint-error";
+      message.textContent = "Aquest exercici ja té les tres pistes utilitzades. Passa al següent exercici per continuar.";
+      box.replaceChildren(message);
+      setStatus("Ja has vist les tres pistes. Ara pots respondre o passar al següent exercici.");
+    } else {
+      button.disabled = hintsUsed >= 3;
+      button.textContent = hintsUsed >= 3 ? "Has utilitzat les 3 pistes" : `Demanar una altra pista (${hintsUsed}/3)`;
+      const message = document.createElement("div");
+      message.className = "hint-error";
+      message.textContent = `No s'ha pogut carregar la pista: ${error.message}`;
+      box.replaceChildren(message);
+      setStatus(error.message);
+    }
+  } finally {
+    hintRequestInProgress = false;
+  }
 }
+
 async function nextProblem() {
   try {
     setStatus("Buscant el següent exercici…");
     const result = await api("/api/next", {student_id:studentId(),language:selectedLanguage(),topic:$("topic").value});
-    renderProblem(result.problem);
+    renderProblem(result.problem, result.hint_status);
     renderProfile(result.profile);
     setStatus("Nou exercici seleccionat segons el teu progrés.");
   } catch (error) { setStatus(error.message); }

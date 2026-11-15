@@ -836,8 +836,17 @@ It answers 50 validation problems, chosen the same way each time, and compares t
 
 - **Accuracy**, next to two numbers to beat: always answering `D` (about 25%, because D is the most common answer) and guessing at random (20%)
 - **Latency**: mean, median, worst, and how many problems went over the limit
-- Accuracy **by language, by level, and with or without options**
+- Accuracy **by language, by level, and with or without OCR options**
+- When `--vision` is enabled, accuracy **with and without an image sent**
 - **Letter counts**, predicted against true. If the model picks one letter far too often, you'll see it here.
+
+The ordinary evaluation is text-only. If the matching images exist in `data/images/` and the optional multimodal server is running on port 8083, compare it with:
+
+```bash
+python3 eval.py --limit 50 --vision --images data/images --name vision50
+```
+
+This sends each available `<id>_<language>.png` to the local vision model. It still respects the official 60-second limit; image inference can time out, so compare both accuracy and latency. For a prediction run with the same option, use `predict.py --vision --images data/images`. Details for starting the optional server are in [Let the model see the image](#let-the-model-see-the-image-experiment).
 
 Every run is saved in `results/eval-<time>-<name>.csv`, and gets one line in `results/ablations.csv`, with the Git commit, so you can compare experiments. Use `--limit 0` for the whole validation set (about 45 minutes for 281 problems), and `--languages cat` for one language.
 

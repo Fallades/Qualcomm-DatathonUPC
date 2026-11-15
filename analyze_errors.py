@@ -12,7 +12,7 @@ import argparse
 import csv
 import json
 import os
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from copilot.topics import classify_problem
 
@@ -71,6 +71,7 @@ def main():
         "language": lambda r: r.get("language", "unknown"),
         "level": lambda r: r.get("level", "unknown"),
         "has_options": lambda r: str(r.get("has_options", bool(r.get("options")))).lower(),
+        "image_sent": lambda r: str(r.get("image_sent", r.get("has_image", "false"))).lower(),
     }
     summaries = []
     for dimension, key_fn in dimensions.items():
@@ -88,7 +89,7 @@ def main():
     mistake_path = os.path.join(args.output_dir, "mistakes.csv")
     with open(mistake_path, "w", newline="", encoding="utf-8") as stream:
         fields = ["id", "language", "level", "topic", "topic_confidence", "label", "answer",
-                  "has_options", "seconds", "status", "text"]
+                  "has_options", "image_sent", "seconds", "status", "text"]
         writer = csv.DictWriter(stream, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         for row in mistakes[:max(0, args.mistakes)]:
@@ -103,6 +104,16 @@ def main():
         stream.write(f"- Validation data: `{os.path.basename(args.data)}`\n")
         stream.write(f"- Matched rows: **{total}** (unmatched: {missing})\n")
         stream.write(f"- Accuracy: **{correct}/{total} = {100*correct/total:.2f}%**\n\n")
+        prediction_counts = Counter(str(r.get("answer", "")) for r in joined)
+        label_counts = Counter(str(r.get("label", "")) for r in joined)
+        majority_label, majority_count = label_counts.most_common(1)[0]
+        stream.write("## Letter distribution and trivial baseline\n\n")
+        stream.write("| Letter | Predictions | Correct labels |\n|---|---:|---:|\n")
+        for letter in "ABCDE":
+            stream.write(f"| {letter} | {prediction_counts.get(letter, 0)} | {label_counts.get(letter, 0)} |\n")
+        stream.write("\n")
+        stream.write(f"Always choosing **{majority_label}** would score **{majority_count}/{total} = {100*majority_count/total:.1f}%** on this exact sample. "
+                     "Treat this only as a diagnostic baseline, not as a useful solver.\n\n")
         for dimension in dimensions:
             stream.write(f"## By {dimension.replace('_', ' ')}\n\n")
             stream.write("| Group | Correct / total | Accuracy | Error |\n|---|---:|---:|---:|\n")
